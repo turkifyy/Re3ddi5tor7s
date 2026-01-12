@@ -1,10 +1,12 @@
+
 import React, { useEffect, useState } from 'react';
 import { RedditAccount, AccountStatus } from '../types';
 import { Button } from './Button';
 import { DatabaseService } from '../services/databaseService';
 import { deepseekService } from '../services/deepseekService';
+import { AnalyticsEngine } from '../services/analyticsEngine'; // Import Algorithm Engine
 import { useToast } from './ToastProvider';
-import { Shield, RefreshCw, Trash2, Plus, Loader2, Brain, X, MessageSquare } from 'lucide-react';
+import { Shield, RefreshCw, Trash2, Plus, Loader2, Brain, X, MessageSquare, Activity } from 'lucide-react';
 
 export const AccountManager: React.FC = () => {
   const [accounts, setAccounts] = useState<RedditAccount[]>([]);
@@ -24,7 +26,14 @@ export const AccountManager: React.FC = () => {
     setIsLoading(true);
     try {
       const data = await DatabaseService.getAccounts();
-      setAccounts(data);
+      
+      // ALGORITHM APPLICATION: Recalculate Health Scores dynamically
+      const processedData = data.map(acc => ({
+          ...acc,
+          healthScore: AnalyticsEngine.calculateAccountHealth(acc)
+      }));
+
+      setAccounts(processedData);
     } catch (err) {
       addToast('error', 'فشل المزامنة مع قاعدة البيانات السحابية.');
     } finally {
@@ -39,6 +48,9 @@ export const AccountManager: React.FC = () => {
   const handleAddAccount = async () => {
     if (!newUsername) return;
     
+    // Initial heuristic for new account
+    const initialHealth = 100; // New accounts start fresh
+
     const newAccountPayload = {
       username: newUsername.startsWith('u/') ? newUsername : `u/${newUsername}`,
       proxyIp: newProxy || 'مباشر',
@@ -46,7 +58,7 @@ export const AccountManager: React.FC = () => {
       karma: 0,
       accountAgeDays: 0,
       lastActive: 'الآن',
-      healthScore: 100
+      healthScore: initialHealth
     };
 
     try {
@@ -102,7 +114,7 @@ export const AccountManager: React.FC = () => {
 
         await DatabaseService.updateAccountSentiment(analysisId, result);
         addToast('success', `اكتمل التحليل: تم رصد شعور ${result.label}.`);
-        await fetchAccounts();
+        await fetchAccounts(); // This will trigger health recalculation via Algorithm
         closeAnalysisModal();
     } catch (e) {
         addToast('error', 'خطأ قاعدة البيانات: فشل تسجيل القياس.');
@@ -165,7 +177,7 @@ export const AccountManager: React.FC = () => {
           </h2>
           <p className="text-slate-400 text-sm mt-2 ml-1">
             {accounts.length > 0 
-              ? `إدارة ${accounts.length} هوية نشطة عبر سحابة Firestore.`
+              ? `إدارة ${accounts.length} هوية نشطة. الخوارزمية تعمل في وضع: Heuristic Analysis.`
               : 'جاري المزامنة مع Firebase...'}
           </p>
         </div>
@@ -218,7 +230,7 @@ export const AccountManager: React.FC = () => {
       {isLoading && accounts.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-32 text-slate-500 glass-panel rounded-2xl">
           <Loader2 className="w-12 h-12 animate-spin text-primary-500 mb-6" />
-          <p className="text-sm font-mono tracking-widest">جاري الاتصال بـ FIRESTORE...</p>
+          <p className="text-sm font-mono tracking-widest">جاري الاتصال بـ FIRESTORE + تشغيل الخوارزميات...</p>
         </div>
       ) : accounts.length === 0 ? (
         <div className="text-center py-32 border border-white/5 border-dashed rounded-2xl bg-white/5 backdrop-blur-sm">
@@ -235,7 +247,7 @@ export const AccountManager: React.FC = () => {
                 <th className="px-8 py-5 font-semibold">حالة الشبكة</th>
                 <th className="px-8 py-5 font-semibold">النقاط (Karma)</th>
                 <th className="px-8 py-5 font-semibold">المشاعر الأخيرة</th>
-                <th className="px-8 py-5 font-semibold">سلامة الحساب</th>
+                <th className="px-8 py-5 font-semibold">سلامة الحساب (Calc)</th>
                 <th className="px-8 py-5 text-left font-semibold">التحكم</th>
               </tr>
             </thead>
@@ -246,8 +258,10 @@ export const AccountManager: React.FC = () => {
                     {acc.username}
                   </td>
                   <td className="px-8 py-5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-500/10 text-green-400 border border-green-500/20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border 
+                        ${acc.status === 'ACTIVE' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 
+                          acc.status === 'FLAGGED' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${acc.status === 'ACTIVE' ? 'bg-green-400 animate-pulse' : 'bg-current'}`}></span>
                         {acc.status}
                     </span>
                   </td>
@@ -288,14 +302,19 @@ export const AccountManager: React.FC = () => {
                     )}
                   </td>
                   <td className="px-8 py-5">
-                    <div className="flex items-center gap-3">
+                    {/* Updated Health Bar using calculated score */}
+                    <div className="flex items-center gap-3" title="محسوب بناءً على الكارما، الحالة، والمشاعر">
                       <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                         <div 
-                          className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 shadow-[0_0_10px_#22c55e]" 
+                          className={`h-full rounded-full transition-all duration-1000 ${
+                              acc.healthScore > 75 ? 'bg-gradient-to-r from-green-500 to-emerald-400 shadow-[0_0_10px_#22c55e]' :
+                              acc.healthScore > 40 ? 'bg-gradient-to-r from-yellow-500 to-orange-400' :
+                              'bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_10px_#ef4444]'
+                          }`} 
                           style={{ width: `${acc.healthScore}%` }}
                         />
                       </div>
-                      <span className="text-xs font-bold text-white">{acc.healthScore}%</span>
+                      <span className={`text-xs font-bold ${acc.healthScore > 75 ? 'text-white' : 'text-slate-400'}`}>{acc.healthScore}%</span>
                     </div>
                   </td>
                   <td className="px-8 py-5 text-left">

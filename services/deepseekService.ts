@@ -1,8 +1,30 @@
+
 import { DatabaseService } from './databaseService';
 import { logger } from './logger';
 
 const KEY_STORAGE = 'redditops_ds_key';
-let dynamicApiKey = localStorage.getItem(KEY_STORAGE) || process.env.DEEPSEEK_API_KEY || '';
+
+// Safe Environment Variable Access for Browser Runtime
+const getEnvVar = (key: string) => {
+    try {
+        // @ts-ignore
+        if (typeof process !== 'undefined' && process.env) {
+            // @ts-ignore
+            return process.env[key];
+        }
+        // Support for Vite-style env vars if migrated later
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            // @ts-ignore
+            return import.meta.env[key] || import.meta.env[`VITE_${key}`];
+        }
+    } catch (e) {
+        return undefined;
+    }
+    return undefined;
+};
+
+let dynamicApiKey = localStorage.getItem(KEY_STORAGE) || getEnvVar('DEEPSEEK_API_KEY') || '';
 const BASE_URL = 'https://api.deepseek.com/v1';
 
 export const setDeepSeekKey = (key: string) => {

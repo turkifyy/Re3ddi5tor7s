@@ -1,20 +1,40 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# RedditOps Platinum V4.5
 
-This contains everything you need to run your app locally.
+منصة احترافية لإدارة عمليات Reddit مدعومة بالذكاء الاصطناعي (DeepSeek) وقاعدة بيانات سحابية (Firebase).
 
-View your app in AI Studio: https://ai.studio/apps/drive/1RbSFMXpFneOcZ6jEX9EGYPwcAXop_hRM
+## 🚀 المميزات
 
-## Run Locally
+*   **ذكاء اصطناعي:** توليد محتوى وتحليل مشاعر باستخدام DeepSeek-V3.
+*   **إدارة الهويات:** تتبع حسابات متعددة، احتساب نقاط الصحة (Health Score) بخوارزميات ذكية.
+*   **تحليلات فورية:** لوحة تحكم تعرض البيانات الحية والكمون (Latency).
+*   **سحابي بالكامل:** يعتمد على Firebase Firestore و Authentication.
 
-**Prerequisites:**  Node.js
+## 🛠️ الإعداد والتشغيل (GitHub & Netlify)
 
+هذا المشروع مصمم ليكون جاهزاً للنشر المباشر.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### 1. إعداد Firebase
+1.  أنشئ مشروعاً جديداً في [Firebase Console](https://console.firebase.google.com).
+2.  فعل **Authentication** (Email/Password).
+3.  أنشئ **Firestore Database** (ابدأ بوضع Test Mode أو اضبط القواعد).
+4.  احصل على `Project ID` و `API Key`.
+
+### 2. النشر على Netlify
+1.  اربط المستودع بـ Netlify.
+2.  إعدادات البناء (Build Settings):
+    *   **Build command:** `npm run build` (أو اتركها فارغة إذا كنت تستخدم الوضع المباشر).
+    *   **Publish directory:** `build` (أو `.` للجذر).
+3.  سيقوم ملف `netlify.toml` المرفق بضبط إعدادات التوجيه تلقائياً.
+
+### 3. التشغيل الأول
+عند فتح الموقع لأول مرة، ستظهر شاشة "نظام التهيئة الأولي". أدخل بيانات Firebase التي حصلت عليها في الخطوة 1، وسيقوم النظام بحفظها مشفرة محلياً في متصفحك.
+
+## 📦 الهيكلية التقنية
+
+*   **Frontend:** React, TailwindCSS, Lucide Icons.
+*   **Backend:** Serverless (Firebase SDK via CDN/ESM).
+*   **AI:** DeepSeek API via direct REST calls.
+
+---
+تم التطوير بواسطة RedditOps Team.

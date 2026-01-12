@@ -1,17 +1,19 @@
+
 import React, { useState, useEffect } from 'react';
 import { Campaign } from '../types';
 import { Button } from './Button';
 import { deepseekService } from '../services/deepseekService';
 import { DatabaseService } from '../services/databaseService';
+import { AnalyticsEngine } from '../services/analyticsEngine'; // Import Algo Engine
 import { useToast } from './ToastProvider';
-import { Cpu, ChevronLeft, MessageSquare, Plus, Target, Zap, Activity, Save, History, FileText } from 'lucide-react';
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore"; // Import Firestore needed for local history fetch
+import { Cpu, ChevronLeft, MessageSquare, Plus, Target, Zap, Activity, Save, History, FileText, Sparkles, BarChart2 } from 'lucide-react';
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { getDb, isFirebaseConfigured } from '../services/firebase';
 
 export const CampaignManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'LIST' | 'CREATE' | 'HISTORY'>('LIST');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [historyLogs, setHistoryLogs] = useState<any[]>([]); // New state for history
+  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const { addToast } = useToast();
   
   // AI Generation State
@@ -20,6 +22,10 @@ export const CampaignManager: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [tone, setTone] = useState('Professional & Insightful');
+  const [smartContextEnabled, setSmartContextEnabled] = useState(true);
+
+  // Prediction State
+  const [viralityScore, setViralityScore] = useState<{score: number, rating: string, color: string} | null>(null);
 
   // New Campaign State
   const [newCampName, setNewCampName] = useState('');
@@ -29,13 +35,17 @@ export const CampaignManager: React.FC = () => {
   const fetchCampaigns = async () => {
       try {
         const data = await DatabaseService.getCampaigns();
-        setCampaigns(data);
+        // Calculate dynamic ROI on fetch using Algorithm
+        const processed = data.map(c => ({
+            ...c,
+            roi: AnalyticsEngine.calculateCampaignROI(c.postsEngaged, c.commentsGenerated)
+        }));
+        setCampaigns(processed);
       } catch (e) {
         addToast('error', 'فشل تحميل الحملات.');
       }
   };
 
-  // Fetch deployed content history
   const fetchHistory = async () => {
     if (!isFirebaseConfigured()) return;
     try {
@@ -78,7 +88,6 @@ export const CampaignManager: React.FC = () => {
         await DatabaseService.addCampaign(newCamp);
         addToast('success', 'تم بدء الحملة بنجاح.');
         await fetchCampaigns();
-        
         setIsCreating(false);
         setNewCampName('');
         setNewSubreddit('');
@@ -93,27 +102,38 @@ export const CampaignManager: React.FC = () => {
         return;
     }
     setIsGenerating(true);
+    setViralityScore(null);
     
-    const context = `Context from user target: ${targetUrl}`;
-    const result = await deepseekService.generateComment(context, tone);
+    // ALGORITHM: Smart Prompt Injection
+    let finalPrompt = targetUrl;
+    if (smartContextEnabled) {
+        finalPrompt = AnalyticsEngine.enhancePromptContext(targetUrl, tone);
+        addToast('info', 'تم تحسين السياق: تم حقن معلمات الوقت والنوايا.');
+    } else {
+        finalPrompt = `Context: ${targetUrl}`;
+    }
+
+    const result = await deepseekService.generateComment(finalPrompt, tone);
     
     if (result.startsWith("Error") || result.startsWith("System Error")) {
         addToast('error', 'فشل التوليد عبر DeepSeek. راجع السجلات.');
     } else {
         addToast('success', 'اكتمل التوليد عبر DeepSeek.');
+        // ALGORITHM: Virality Prediction
+        const prediction = AnalyticsEngine.predictVirality(result);
+        setViralityScore(prediction);
     }
 
     setGeneratedContent(result);
     setIsGenerating(false);
 
+    // Update Stats in Background
     if (campaigns.length > 0 && !result.startsWith("Error")) {
         const targetCampaign = campaigns[0];
         try {
             await DatabaseService.updateCampaignStats(targetCampaign.id, 1, 1);
-            fetchCampaigns(); // Refresh stats in background
-        } catch(e) {
-            console.warn("Failed to update stats background");
-        }
+            fetchCampaigns(); 
+        } catch(e) {}
     }
   };
 
@@ -124,6 +144,7 @@ export const CampaignManager: React.FC = () => {
           await DatabaseService.deployCampaignContent(campaigns[0]?.id, generatedContent, "r/general");
           addToast('success', 'تم النشر: تمت كتابة المحتوى في قاعدة بيانات الإنتاج.');
           setGeneratedContent('');
+          setViralityScore(null);
       } catch (e) {
           addToast('error', 'فشل النشر: تعذر الكتابة في قاعدة البيانات.');
       } finally {
@@ -229,8 +250,8 @@ export const CampaignManager: React.FC = () => {
                             <div className="text-white font-mono text-sm">{campaign.commentsGenerated}</div>
                         </div>
                         <div className="space-y-1">
-                            <div className="text-slate-500 text-[10px] uppercase">العائد</div>
-                            <div className="text-green-400 font-mono text-sm">{campaign.roi}%</div>
+                            <div className="text-slate-500 text-[10px] uppercase">العائد (ROI)</div>
+                            <div className={`font-mono text-sm ${campaign.roi > 100 ? 'text-success-500' : 'text-slate-300'}`}>{campaign.roi}%</div>
                         </div>
                     </div>
                     </div>
@@ -318,7 +339,21 @@ export const CampaignManager: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-6">
+                {/* ALGORITHM CONTROL TOGGLE */}
+                <div className="p-4 bg-white/5 rounded-xl border border-white/5 flex items-center justify-between cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setSmartContextEnabled(!smartContextEnabled)}>
+                    <div className="flex items-center gap-3">
+                        <Sparkles className={`w-5 h-5 ${smartContextEnabled ? 'text-violet-400' : 'text-slate-500'}`} />
+                        <div>
+                            <div className="text-sm font-bold text-white">Smart Context Injection</div>
+                            <div className="text-[10px] text-slate-400">تحليل الوقت والنوايا (Time & Intent Analysis)</div>
+                        </div>
+                    </div>
+                    <div className={`w-10 h-5 rounded-full relative transition-colors ${smartContextEnabled ? 'bg-violet-600' : 'bg-slate-700'}`}>
+                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${smartContextEnabled ? 'left-1' : 'left-6'}`}></div>
+                    </div>
+                </div>
+
+                <div className="pt-2">
                   <Button onClick={handleGenerate} isLoading={isGenerating} className="w-full h-12 text-base shadow-[0_0_20px_rgba(6,182,212,0.3)]">
                      <Cpu className="w-5 h-5 ml-2" />
                      تهيئة DeepSeek-V3
@@ -331,12 +366,22 @@ export const CampaignManager: React.FC = () => {
           <div className="glass-panel rounded-2xl p-8 h-full min-h-[500px] flex flex-col relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 blur-[80px] rounded-full pointer-events-none"></div>
 
-            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3 relative z-10">
-              <div className="p-2 bg-violet-500/10 rounded-lg">
-                <MessageSquare className="w-5 h-5 text-violet-400" />
-              </div>
-              وحدة المخرجات
-            </h3>
+            <div className="flex justify-between items-center mb-6 relative z-10">
+                <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                    <div className="p-2 bg-violet-500/10 rounded-lg">
+                        <MessageSquare className="w-5 h-5 text-violet-400" />
+                    </div>
+                    وحدة المخرجات
+                </h3>
+                {viralityScore && (
+                    <div className="px-3 py-1 rounded-full bg-slate-900 border border-white/10 flex items-center gap-2 animate-in fade-in zoom-in">
+                        <BarChart2 className="w-3 h-3 text-slate-400" />
+                        <span className="text-[10px] text-slate-400">احتمالية الانتشار:</span>
+                        <span className={`text-xs font-bold font-mono ${viralityScore.color}`}>{viralityScore.score}/100</span>
+                    </div>
+                )}
+            </div>
+
             <div className="flex-1 bg-[#0b0f19]/80 backdrop-blur-sm rounded-xl p-6 font-mono text-sm text-slate-300 border border-white/10 overflow-y-auto relative z-10 shadow-inner">
               {generatedContent ? (
                 <div className="animate-in fade-in duration-500">
