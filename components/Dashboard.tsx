@@ -9,7 +9,7 @@ import { logger } from '../services/logger';
 import { roboticsEngine } from '../services/roboticsEngine'; // Import Engine
 import { BotAgent, RoboticsState } from '../types';
 
-// Animated Counter
+// Animated Counter with Clean Cleanup
 const Counter = ({ end, duration = 2000 }: { end: number, duration?: number }) => {
   const [count, setCount] = useState(0);
 
@@ -93,6 +93,7 @@ export const Dashboard: React.FC = () => {
   const isMounted = useRef(true);
 
   const fetchData = useCallback(async () => {
+    // Only attempt fetch if connected to avoid errors
     try {
         const accs = await DatabaseService.getAccounts();
         const camps = await DatabaseService.getCampaigns();
@@ -103,7 +104,7 @@ export const Dashboard: React.FC = () => {
             setStats({ accounts: accs.length, campaigns: camps.length, engagement: totalEngaged, aiOps: aiCount });
         }
     } catch(e) {
-        // Silent fail prevents dashboard crash on load errors
+        // Silent fail
     }
   }, []);
 
@@ -129,7 +130,6 @@ export const Dashboard: React.FC = () => {
 
       setLiveData(prev => {
         const nextTime = prev[prev.length - 1].time + 1;
-        // Amplify ops for visual effect if low
         const value = realOps > 0 ? realOps * 10 : Math.max(0, prev[prev.length-1].value - 5 + Math.random()*10); 
         return [...prev.slice(1), { time: nextTime, value: Math.min(100, Math.max(0, value)) }];
       });

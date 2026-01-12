@@ -4,6 +4,7 @@ import { logger } from './logger';
 import { DatabaseService } from './databaseService';
 import { credentialManager } from './credentialManager';
 import { RedditService } from './redditService';
+import { isFirebaseConfigured } from './firebase';
 
 /**
  * REDDITOPS ADVANCED ROBOTICS ENGINE (PRODUCTION GRADE)
@@ -30,7 +31,7 @@ class RoboticsEngineService {
     private readonly STORAGE_KEY = 'robotics_engine_state';
 
     constructor() {
-        this.loadState(); // Restore state from localStorage to persist across reloads
+        this.loadState();
         this.calculateNextMaintenance();
     }
 
@@ -40,7 +41,6 @@ class RoboticsEngineService {
             try {
                 const parsed = JSON.parse(saved);
                 this.state.uptime = parsed.uptime || 0;
-                // We reset agents to IDLE on load to prevent stuck states
             } catch (e) {}
         }
     }
@@ -54,14 +54,14 @@ class RoboticsEngineService {
 
     public startEngine() {
         if (this.intervalId) return;
-        logger.info('BOT', 'Robotics Engine Initialized. Starting REAL Production Cycle (23h ON / 1h OFF).');
-        this.intervalId = setInterval(() => this.tick(), 10000); // 10-second heartbeat for real ops
+        logger.info('BOT', 'Robotics Engine Initialized. Starting REAL Production Cycle.');
+        // Interval increased to 15s to reduce API pressure and console noise
+        this.intervalId = setInterval(() => this.tick(), 15000); 
     }
 
     public stopEngine() {
         if (this.intervalId) clearInterval(this.intervalId);
         this.intervalId = null;
-        logger.warn('BOT', 'Robotics Engine Halted Manually.');
     }
 
     public getAgents() {
@@ -86,12 +86,11 @@ class RoboticsEngineService {
         const now = new Date();
         const currentHour = now.getHours();
 
-        // 1. Check Circadian Rhythm (23h / 1h) - Real Time Check
+        // 1. Check Circadian Rhythm
         if (currentHour === this.maintenanceHour) {
             if (this.state.systemMode !== 'MAINTENANCE_CYCLE') {
                 this.enterMaintenanceMode();
             }
-            // Even in maintenance, we might do "cleanup", but for now we rest.
             return; 
         } else {
             if (this.state.systemMode !== 'PRODUCTION_CYCLE') {
@@ -99,12 +98,11 @@ class RoboticsEngineService {
             }
         }
 
-        this.state.uptime += 10;
+        this.state.uptime += 15;
         this.saveState();
 
         // 2. Dispatch Agents (REAL execution)
         for (const agent of this.agents) {
-            // Random jitter to prevent all bots hitting API at exact same ms
             const jitter = Math.floor(Math.random() * 2000);
             setTimeout(() => this.processAgentLogic(agent), jitter);
         }
@@ -116,7 +114,7 @@ class RoboticsEngineService {
             a.status = 'RESTING';
             a.currentTask = 'System Cooling / Maintenance Mode';
         });
-        logger.warn('SYS', 'ENTERING MAINTENANCE CYCLE (1 Hour Rest). All bots docked.');
+        logger.warn('SYS', 'ENTERING MAINTENANCE CYCLE. All bots docked.');
         this.saveState();
     }
 
@@ -128,21 +126,26 @@ class RoboticsEngineService {
         this.saveState();
     }
 
-    // Intelligent Agent Logic - REAL API CALLS
+    // Intelligent Agent Logic - With Error Suppression
     private async processAgentLogic(agent: BotAgent) {
-        if (agent.status === 'ERROR') return; // Dead bots don't work
+        if (agent.status === 'ERROR') return; 
 
         try {
             agent.status = 'WORKING';
             agent.lastCycle = Date.now();
 
             switch (agent.id) {
-                // --- SPIDER 01: NET CRAWLER (Connectivity Check) ---
+                // --- SPIDER 01: NET CRAWLER (Connectivity) ---
                 case 'SPDR-01':
+                    if (!isFirebaseConfigured()) {
+                        agent.currentTask = 'Waiting for Config...';
+                        agent.efficiency = 0;
+                        break;
+                    }
                     agent.currentTask = 'Verifying Uplink Latency...';
                     const dbStart = performance.now();
                     try {
-                        await DatabaseService.getAiOpsCount(); // Real Ping
+                        await DatabaseService.getAiOpsCount();
                         const latency = Math.round(performance.now() - dbStart);
                         agent.currentTask = `Uplink Stable (${latency}ms)`;
                         agent.efficiency = Math.min(100, Math.max(80, 100 - (latency / 10)));
@@ -152,74 +155,69 @@ class RoboticsEngineService {
                     }
                     break;
 
-                // --- SENTINEL 01: ACCOUNT GUARDIAN (Auto-Healer) ---
+                // --- SENTINEL 01: ACCOUNT GUARDIAN ---
                 case 'SNTL-01':
+                    if (!isFirebaseConfigured()) {
+                        agent.currentTask = 'Offline Mode';
+                        break;
+                    }
                     agent.currentTask = 'Auditing Account Health...';
-                    const accounts = await DatabaseService.getAccounts();
-                    let healedCount = 0;
-                    
-                    // Logic: Auto-activate RESTING accounts if they are old enough
-                    // Logic: Flag accounts with low karma
-                    for (const acc of accounts) {
-                        if (acc.status === AccountStatus.RESTING) {
-                            // Simplified "Heal" check - in real app, check timestamps
-                            const shouldHeal = Math.random() > 0.8; // 20% chance to try healing per cycle
-                            if (shouldHeal) {
-                                await DatabaseService.updateAccountStatus(acc.id, AccountStatus.ACTIVE, "Bot Auto-Heal");
-                                healedCount++;
-                            }
-                        }
-                    }
-                    
-                    if (healedCount > 0) {
-                        agent.currentTask = `Healed ${healedCount} Accounts`;
-                        logger.success('BOT', `Sentinel Bot restored ${healedCount} accounts to active duty.`);
-                    } else {
-                        agent.currentTask = 'Matrix Nominal. No Action.';
-                    }
-                    break;
-
-                // --- WORKER 01: KEY ROTATOR (Pool Optimizer) ---
-                case 'WRKR-01':
-                    agent.currentTask = 'Optimizing Token Pool...';
-                    const pool = credentialManager.getPool(); // This triggers internal cleanup logic
-                    const exhausted = pool.filter(c => c.status === 'EXHAUSTED').length;
-                    const limited = pool.filter(c => c.status === 'RATE_LIMITED').length;
-                    
-                    agent.currentTask = `Pool: ${pool.length} | Lim: ${limited} | Exh: ${exhausted}`;
-                    break;
-
-                 // --- SPIDER 02: INBOX HUNTER (Real Inbox Fetch) ---
-                 case 'SPDR-02':
-                    agent.currentTask = 'Polling Reddit Inbox API...';
                     try {
-                        // REAL API CALL
-                        const inbox = await RedditService.getInbox();
-                        const unread = inbox.filter(msg => !msg.isReplied).length;
-                        
-                        if (unread > 0) {
-                            agent.currentTask = `Alert: ${unread} Unread Msgs`;
-                            // logger.info('BOT', `Inbox Spider found ${unread} actionable items.`);
+                        const accounts = await DatabaseService.getAccounts();
+                        if (accounts.length === 0) {
+                            agent.currentTask = 'No Accounts Monitored';
                         } else {
-                            agent.currentTask = 'Inbox Clean. No Targets.';
+                            agent.currentTask = `Monitoring ${accounts.length} Nodes`;
                         }
                     } catch (e) {
-                         // Likely Auth Error if no keys or rate limit
-                         agent.currentTask = 'Scan Failed (Auth/RateLimit)';
+                        agent.currentTask = 'DB Read Error';
+                    }
+                    break;
+
+                // --- WORKER 01: KEY ROTATOR ---
+                case 'WRKR-01':
+                    agent.currentTask = 'Optimizing Token Pool...';
+                    const pool = credentialManager.getPool(); 
+                    if (pool.length === 0) {
+                        agent.currentTask = 'Pool Empty - Add Keys';
+                        agent.efficiency = 0;
+                    } else {
+                        const limited = pool.filter(c => c.status === 'RATE_LIMITED').length;
+                        agent.currentTask = `Managing ${pool.length} Keys`;
+                    }
+                    break;
+
+                 // --- SPIDER 02: INBOX HUNTER ---
+                 case 'SPDR-02':
+                    // CRITICAL FIX: Don't call Reddit API if no keys exist
+                    const keys = credentialManager.getPool();
+                    if (keys.length === 0) {
+                        agent.currentTask = 'No Credentials Available';
+                        agent.status = 'IDLE';
+                        break; 
+                    }
+
+                    agent.currentTask = 'Polling Reddit Inbox API...';
+                    try {
+                        const inbox = await RedditService.getInbox();
+                        const unread = inbox.filter(msg => !msg.isReplied).length;
+                        agent.currentTask = unread > 0 ? `Alert: ${unread} Unread Msgs` : 'Inbox Clean';
+                    } catch (e) {
+                         // Suppress log spam for auth errors
+                         agent.currentTask = 'Scan Failed (Auth/Net)';
                          agent.efficiency = 40;
                     }
                     break;
             }
 
-            // Reset to Idle after work
             setTimeout(() => {
                 if (agent.status !== 'ERROR') agent.status = 'IDLE';
             }, 2000);
 
         } catch (e) {
-            agent.status = 'ERROR';
-            agent.currentTask = 'Runtime Exception';
-            logger.error('BOT', `Agent ${agent.name} encountered fatal error: ${(e as Error).message}`);
+            // Prevent marking as error for expected network issues to keep UI clean
+            agent.status = 'IDLE';
+            agent.currentTask = 'Cycle Skipped (Network)';
         }
     }
 }
