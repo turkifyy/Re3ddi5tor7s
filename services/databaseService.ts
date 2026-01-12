@@ -1,3 +1,4 @@
+
 import { getDb, isFirebaseConfigured } from './firebase';
 import { 
   collection, 
@@ -11,7 +12,7 @@ import {
   increment,
   serverTimestamp
 } from "firebase/firestore";
-import { RedditAccount, Campaign } from '../types';
+import { RedditAccount, Campaign, AccountStatus } from '../types';
 import { logger } from './logger';
 
 const ACCOUNTS_COL = 'accounts';
@@ -84,6 +85,16 @@ export const DatabaseService = {
         await updateDoc(ref, { sentiment });
         logger.info('DB', `تم تحديث قياس المشاعر للعقدة ${id}`);
     }, 'UpdateSentiment');
+  },
+
+  // ROBOTICS EXCLUSIVE: Auto-Heal Capability
+  async updateAccountStatus(id: string, status: AccountStatus, note?: string): Promise<void> {
+     return withTracking(async () => {
+        const db = ensureConnection();
+        const ref = doc(db, ACCOUNTS_COL, id);
+        await updateDoc(ref, { status, lastActive: new Date().toISOString() });
+        if(note) logger.info('BOT', `Status Update [${id}]: ${status} - ${note}`);
+     }, 'BotUpdateStatus');
   },
 
   async deleteAccount(id: string): Promise<void> {
