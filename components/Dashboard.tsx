@@ -1,10 +1,13 @@
+
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { Activity, Zap, Users, TrendingUp, Server, Wifi, Target } from 'lucide-react';
+import { Activity, Zap, Users, TrendingUp, Server, Wifi, Target, Cpu, GitBranch, ShieldCheck, Clock, Power } from 'lucide-react';
 import { DatabaseService } from '../services/databaseService';
 import { logger } from '../services/logger';
+import { roboticsEngine } from '../services/roboticsEngine'; // Import Engine
+import { BotAgent, RoboticsState } from '../types';
 
 // Animated Counter
 const Counter = ({ end, duration = 2000 }: { end: number, duration?: number }) => {
@@ -82,6 +85,11 @@ export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({ accounts: 0, campaigns: 0, engagement: 0, aiOps: 0 });
   const [liveData, setLiveData] = useState<any[]>(Array(30).fill(0).map((_, i) => ({ time: i, value: 0 })));
   const [currentLatency, setCurrentLatency] = useState(0);
+  
+  // Robotics State
+  const [agents, setAgents] = useState<BotAgent[]>([]);
+  const [roboState, setRoboState] = useState<RoboticsState | null>(null);
+
   const isMounted = useRef(true);
 
   const fetchData = useCallback(async () => {
@@ -105,7 +113,7 @@ export const Dashboard: React.FC = () => {
     return () => { isMounted.current = false; };
   }, [fetchData]);
 
-  // Live Telemetry Loop
+  // Live Telemetry Loop (Includes Robotics Updates)
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isMounted.current) return;
@@ -114,6 +122,10 @@ export const Dashboard: React.FC = () => {
       const realLatency = logger.getLatestLatency();
       
       setCurrentLatency(realLatency);
+
+      // Robotics Updates
+      setAgents([...roboticsEngine.getAgents()]);
+      setRoboState({...roboticsEngine.getState()});
 
       setLiveData(prev => {
         const nextTime = prev[prev.length - 1].time + 1;
@@ -128,17 +140,18 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-8 pb-20">
       {/* Header Section */}
-      <div className="flex justify-between items-end mb-8 animate-in fade-in slide-in-from-top-4">
+      <div className="flex flex-col md:flex-row justify-between items-end mb-8 animate-in fade-in slide-in-from-top-4 gap-4">
         <div>
             <h2 className="text-3xl font-black text-white tracking-tight mb-1">نظرة عامة تكتيكية</h2>
             <p className="text-slate-400 font-mono text-xs tracking-wider">بث القياس عن بعد // <span className="text-success-500 animate-pulse">مباشر</span></p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
             <div className={`px-3 py-1 bg-white/5 rounded border border-white/5 text-[10px] font-mono transition-colors duration-500 ${currentLatency > 500 ? "text-red-400 border-red-500/20 bg-red-500/10" : "text-slate-400"}`}>
                 الاستجابة: <span className="text-white font-bold">{currentLatency}ms</span>
             </div>
-            <div className="px-3 py-1 bg-white/5 rounded border border-white/5 text-[10px] text-slate-400 font-mono">
-                الحالة: <span className="text-success-500">عملياتي</span>
+            <div className="px-3 py-1 bg-white/5 rounded border border-white/5 text-[10px] text-slate-400 font-mono flex items-center gap-2">
+                <Power className={`w-3 h-3 ${roboState?.systemMode === 'MAINTENANCE_CYCLE' ? 'text-orange-400' : 'text-success-500'}`} />
+                دورة النظام: <span className={roboState?.systemMode === 'MAINTENANCE_CYCLE' ? 'text-orange-400' : 'text-success-500'}>{roboState?.systemMode === 'MAINTENANCE_CYCLE' ? 'صيانة (Rest)' : 'إنتاج (Active)'}</span>
             </div>
         </div>
       </div>
@@ -149,6 +162,66 @@ export const Dashboard: React.FC = () => {
         <WidgetCard title="الهويات النشطة" value={stats.accounts} sub="عمليات الشبكة" icon={Users} color="violet" delay={100} />
         <WidgetCard title="عمليات DEEPSEEK" value={stats.aiOps} sub="توكنز" icon={Zap} color="warning" delay={200} />
         <WidgetCard title="حالة الحملات" value={stats.campaigns} sub="نشطة" icon={Target} color="success" delay={300} />
+      </div>
+
+      {/* --- AUTONOMOUS ROBOTICS GRID --- */}
+      <div className="glass-panel rounded-2xl p-6 border border-primary-500/10 relative overflow-hidden">
+           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+               <Cpu className="w-64 h-64 text-primary-400" />
+           </div>
+           
+           <div className="flex justify-between items-center mb-6 relative z-10">
+               <h3 className="text-white font-bold flex items-center gap-2">
+                   <GitBranch className="w-5 h-5 text-primary-400" />
+                   شبكة الروبوتات والعناكب (Autonomous Grid)
+               </h3>
+               <div className="text-[10px] text-slate-500 font-mono bg-white/5 px-2 py-1 rounded border border-white/5 flex items-center gap-2">
+                   <Clock className="w-3 h-3" />
+                   الصيانة القادمة: {roboState?.nextMaintenance}
+               </div>
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+               {agents.map((agent) => (
+                   <div key={agent.id} className="bg-[#0b0f19] border border-white/5 rounded-xl p-4 hover:border-primary-500/30 transition-all group">
+                       <div className="flex justify-between items-start mb-3">
+                           <div className="flex items-center gap-2">
+                               <div className={`p-1.5 rounded-lg ${
+                                   agent.type === 'SPIDER' ? 'bg-violet-500/10 text-violet-400' : 
+                                   agent.type === 'SENTINEL' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'
+                               }`}>
+                                   {agent.type === 'SPIDER' ? <Wifi className="w-3 h-3" /> : 
+                                    agent.type === 'SENTINEL' ? <ShieldCheck className="w-3 h-3" /> : <Cpu className="w-3 h-3" />}
+                               </div>
+                               <div>
+                                   <div className="text-xs font-bold text-white group-hover:text-primary-400 transition-colors">{agent.name}</div>
+                                   <div className="text-[9px] text-slate-500 font-mono tracking-wider">{agent.id}</div>
+                               </div>
+                           </div>
+                           <div className={`w-1.5 h-1.5 rounded-full ${
+                               agent.status === 'WORKING' ? 'bg-success-500 animate-pulse' : 
+                               agent.status === 'RESTING' ? 'bg-orange-500' : 
+                               agent.status === 'ERROR' ? 'bg-red-500' : 'bg-slate-700'
+                           }`}></div>
+                       </div>
+                       
+                       <div className="space-y-2">
+                           <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                               <span>Task:</span>
+                               <span className="text-white truncate max-w-[100px]" title={agent.currentTask}>{agent.currentTask}</span>
+                           </div>
+                           
+                           <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                               <div 
+                                    className={`h-full transition-all duration-500 ${agent.efficiency > 80 ? 'bg-primary-500' : agent.efficiency > 50 ? 'bg-orange-500' : 'bg-red-500'}`} 
+                                    style={{ width: `${agent.efficiency}%` }}
+                               ></div>
+                           </div>
+                           <div className="text-[9px] text-right text-slate-600 font-mono">Efficiency: {agent.efficiency}%</div>
+                       </div>
+                   </div>
+               ))}
+           </div>
       </div>
 
       {/* Charts Section */}

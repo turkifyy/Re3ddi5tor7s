@@ -13,6 +13,7 @@ import { ViewState, UserProfile } from './types';
 import { isFirebaseConfigured, getAuthInstance } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { AuthService } from './services/authService';
+import { roboticsEngine } from './services/roboticsEngine';
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
@@ -24,6 +25,13 @@ function App() {
   useEffect(() => {
       setIsConfigured(isFirebaseConfigured());
       setLoadingAuth(false);
+      
+      // Start Robotics Engine
+      roboticsEngine.startEngine();
+
+      return () => {
+          roboticsEngine.stopEngine();
+      };
   }, []);
 
   // Listen for Auth changes once configured

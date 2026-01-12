@@ -68,7 +68,7 @@ export interface SystemLog {
   id: string;
   timestamp: string;
   level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS';
-  module: 'AAO' | 'CASE' | 'SYS' | 'NET' | 'DB' | 'AI' | 'AUTH' | 'REDDIT';
+  module: 'AAO' | 'CASE' | 'SYS' | 'NET' | 'DB' | 'AI' | 'AUTH' | 'REDDIT' | 'BOT';
   message: string;
 }
 
@@ -83,6 +83,26 @@ export interface AiGenerationRequest {
   contextData: string;
   tone: string;
   model: string;
+}
+
+// --- ROBOTICS TYPES ---
+export type AgentStatus = 'IDLE' | 'WORKING' | 'RESTING' | 'ERROR';
+
+export interface BotAgent {
+    id: string;
+    name: string;
+    type: 'SPIDER' | 'SENTINEL' | 'WORKER';
+    status: AgentStatus;
+    currentTask: string;
+    efficiency: number; // 0-100%
+    lastCycle: number;
+}
+
+export interface RoboticsState {
+    systemMode: 'PRODUCTION_CYCLE' | 'MAINTENANCE_CYCLE';
+    uptime: number;
+    activeAgents: number;
+    nextMaintenance: string;
 }
 
 export type ViewState = 'DASHBOARD' | 'ACCOUNTS' | 'CAMPAIGNS' | 'INBOX' | 'LOGS' | 'SETTINGS';
