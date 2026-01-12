@@ -6,7 +6,8 @@ import { DatabaseService } from '../services/databaseService';
 import { deepseekService } from '../services/deepseekService';
 import { AnalyticsEngine } from '../services/analyticsEngine'; // Import Algorithm Engine
 import { useToast } from './ToastProvider';
-import { Shield, RefreshCw, Trash2, Plus, Loader2, Brain, X, MessageSquare, Activity } from 'lucide-react';
+import { Shield, RefreshCw, Trash2, Plus, Loader2, Brain, X, MessageSquare, Activity, Wifi } from 'lucide-react';
+import { isFirebaseConfigured } from '../services/firebase';
 
 export const AccountManager: React.FC = () => {
   const [accounts, setAccounts] = useState<RedditAccount[]>([]);
@@ -14,6 +15,9 @@ export const AccountManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { addToast } = useToast();
   
+  // Connection State (Initialized from config check)
+  const [isConnected, setIsConnected] = useState(isFirebaseConfigured());
+
   const [newUsername, setNewUsername] = useState('');
   const [newProxy, setNewProxy] = useState('');
 
@@ -34,8 +38,10 @@ export const AccountManager: React.FC = () => {
       }));
 
       setAccounts(processedData);
+      setIsConnected(true); // Uplink confirmed
     } catch (err) {
       addToast('error', 'فشل المزامنة مع قاعدة البيانات السحابية.');
+      setIsConnected(false); // Uplink lost
     } finally {
       setIsLoading(false);
     }
@@ -181,7 +187,14 @@ export const AccountManager: React.FC = () => {
               : 'جاري المزامنة مع Firebase...'}
           </p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
+          
+          {/* Connection Status Indicator */}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-500 ${isConnected ? 'bg-green-500/5 border-green-500/20 text-green-400' : 'bg-red-500/5 border-red-500/20 text-red-400'}`}>
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_#22c55e] animate-pulse' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`}></div>
+              <span className="text-[10px] font-mono font-bold tracking-wider">{isConnected ? 'LIVE UPLINK' : 'OFFLINE'}</span>
+          </div>
+
           <Button variant="secondary" size="sm" onClick={fetchAccounts} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
             مزامنة الشبكة
