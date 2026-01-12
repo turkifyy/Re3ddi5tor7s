@@ -133,9 +133,9 @@ export const AccountManager: React.FC = () => {
                 <div>
                   <h3 className="text-xl font-bold text-white flex items-center gap-2">
                     <Brain className="w-5 h-5 text-primary-400" />
-                    فحص المشاعر العصبي
+                    فحص المشاعر العصبي (AI Sentiment)
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1 font-mono">أدخل البيانات المستهدفة للمعالجة</p>
+                  <p className="text-xs text-slate-400 mt-1 font-mono">أدخل العينة النصية للتحليل عبر DeepSeek API</p>
                 </div>
                 <button onClick={closeAnalysisModal} className="text-slate-500 hover:text-white transition-colors">
                   <X className="w-5 h-5" />
@@ -145,12 +145,12 @@ export const AccountManager: React.FC = () => {
               <div className="space-y-4">
                 <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                        <MessageSquare className="w-3 h-3" /> نص العينة
+                        <MessageSquare className="w-3 h-3" /> نص التعليق / المنشور
                     </label>
                     <textarea 
                         value={analysisText}
                         onChange={(e) => setAnalysisText(e.target.value)}
-                        placeholder="الصق نص التعليق أو المنشور هنا..."
+                        placeholder="أدخل نص التعليق هنا ليقوم الذكاء الاصطناعي بتقييم نبرته..."
                         className="w-full h-32 bg-[#0b0f19] border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none transition-all placeholder:text-slate-700 resize-none"
                         autoFocus
                     />
