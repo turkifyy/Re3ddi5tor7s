@@ -44,13 +44,17 @@ export const RedditService = {
                 headers: {
                     'Authorization': `Basic ${credentials}`,
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'User-Agent': `web:redditops-platinum:v4.5 (Cluster Node)`
+                    // IMPROVED USER AGENT TO AVOID BANS
+                    'User-Agent': `web:redditops-platinum:v4.5 (by /u/${cred.username})`
                 },
                 body: formData
             });
 
-            if (response.status === 429 || response.status === 401) {
-                throw new Error("AUTH_FAIL"); // Trigger rotation
+            if (response.status === 429) {
+                throw new Error("RATE_LIMIT");
+            }
+            if (response.status === 401) {
+                throw new Error("AUTH_FAIL"); 
             }
 
             if (!response.ok) {
@@ -73,6 +77,21 @@ export const RedditService = {
 
         } catch (error) {
             throw error;
+        }
+    },
+
+    /**
+     * Helper to verify a key manually from Settings
+     */
+    async verifyCredential(credId: string): Promise<boolean> {
+        try {
+            // Force bypass cache to test real auth
+            tokenCache.delete(credId);
+            await this.authenticate(credId);
+            return true;
+        } catch (e) {
+            console.error("Verification failed:", e);
+            return false;
         }
     },
 
@@ -121,7 +140,7 @@ export const RedditService = {
                 return json as T;
 
             } catch (e: any) {
-                if (e.message === "AUTH_FAIL") {
+                if (e.message === "AUTH_FAIL" || e.message === "RATE_LIMIT") {
                     credentialManager.markRateLimited(cred.id);
                     attempts++;
                     continue;
@@ -146,6 +165,8 @@ export const RedditService = {
                     }
                 })
             );
+
+            if (!data.data || !data.data.children) return [];
 
             // Map Reddit JSON to our Interface
             const mappedComments: RedditComment[] = data.data.children.map((child: any) => {

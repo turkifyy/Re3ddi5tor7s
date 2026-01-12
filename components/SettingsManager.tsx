@@ -2,10 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { useToast } from './ToastProvider';
-import { Settings, Shield, Server, Wifi, Database, Activity, AlertTriangle, RefreshCw, Eye, Key, Save, Lock, MessageCircle, User, Plus, Trash2, Cpu, CheckCircle2 } from 'lucide-react';
+import { Settings, Shield, Server, Wifi, Database, Activity, AlertTriangle, RefreshCw, Eye, Key, Save, Lock, MessageCircle, User, Plus, Trash2, Cpu, CheckCircle2, Zap } from 'lucide-react';
 import { isFirebaseConfigured, initializeFirebase } from '../services/firebase';
 import { setDeepSeekKey, getDeepSeekKey } from '../services/deepseekService';
 import { credentialManager } from '../services/credentialManager';
+import { RedditService } from '../services/redditService';
 import { RedditCredential } from '../types';
 
 interface SettingsManagerProps {
@@ -27,6 +28,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
   const [newUser, setNewUser] = useState('');
   const [newPass, setNewPass] = useState('');
   const [isAddingCred, setIsAddingCred] = useState(false);
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   // Firebase Config State (Loaded from localStorage)
   const [fbProjectId, setFbProjectId] = useState('');
@@ -85,6 +87,24 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
           loadCredentials();
           addToast('info', 'تمت إزالة المفتاح.');
       }
+  };
+
+  const handleTestKey = async (id: string) => {
+      setTestingId(id);
+      addToast('info', 'جاري فحص الاتصال بـ Reddit API...');
+      
+      const success = await RedditService.verifyCredential(id);
+      
+      if (success) {
+          addToast('success', 'اتصال ناجح! هذا المفتاح يعمل بشكل صحيح.');
+          credentialManager.markSuccess(id);
+      } else {
+          addToast('error', 'فشل الاتصال: بيانات الاعتماد غير صحيحة أو محظورة.');
+          credentialManager.markRateLimited(id); // Effectively disable it
+      }
+      
+      loadCredentials();
+      setTestingId(null);
   };
 
   const handleSaveFirebaseConfig = async () => {
@@ -293,6 +313,14 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
                              </div>
                              
                              <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                <button
+                                    onClick={() => handleTestKey(cred.id)}
+                                    disabled={testingId === cred.id}
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    <Zap className={`w-3 h-3 ${testingId === cred.id ? 'text-yellow-400 animate-pulse' : 'text-slate-500'}`} />
+                                    {testingId === cred.id ? 'جاري الفحص...' : 'فحص الاتصال'}
+                                </button>
                                 <div className="text-right mr-4 hidden md:block">
                                     <div className="text-[10px] text-slate-500 uppercase tracking-wider">Status</div>
                                     <div className={`text-xs font-bold ${cred.status === 'READY' ? 'text-green-400' : 'text-orange-400'}`}>{cred.status}</div>

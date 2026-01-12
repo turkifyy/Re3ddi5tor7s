@@ -7,6 +7,7 @@ const STORAGE_KEY = 'redditops_credential_pool';
 /**
  * SMART CREDENTIAL ROTATION MANAGER
  * Handles the lifecycle of multiple Reddit API keys to avoid Rate Limits.
+ * Features: LRU Selection, Auto-Cooldown, Persistence.
  */
 class CredentialManagerService {
     private pool: RedditCredential[] = [];
@@ -19,9 +20,16 @@ class CredentialManagerService {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
-                this.pool = JSON.parse(stored);
+                const parsed = JSON.parse(stored);
+                // Validate structure to prevent crash from bad data
+                if (Array.isArray(parsed)) {
+                    this.pool = parsed;
+                } else {
+                    this.pool = [];
+                }
             }
         } catch (e) {
+            console.error("Failed to load credential pool", e);
             this.pool = [];
         }
     }
@@ -31,15 +39,17 @@ class CredentialManagerService {
     }
 
     public getPool(): RedditCredential[] {
-        // Refresh statuses based on time
+        // Refresh statuses based on time (Auto-Healing)
         const now = Date.now();
         let changed = false;
         
         this.pool.forEach(cred => {
-            if (cred.status === 'RATE_LIMITED' && cred.cooldownUntil < now) {
+            // Check if Cooldown period is over
+            if (cred.status === 'RATE_LIMITED' && cred.cooldownUntil > 0 && cred.cooldownUntil < now) {
                 cred.status = 'READY';
                 cred.cooldownUntil = 0;
                 changed = true;
+                logger.info('SYS', `Key ${cred.clientId.substring(0,4)}... recovered from cooldown.`);
             }
         });
 
@@ -71,14 +81,8 @@ class CredentialManagerService {
      * Strategy: Least Recently Used (LRU) among 'READY' keys.
      */
     public getOptimalCredential(): RedditCredential | null {
-        const now = Date.now();
-        
-        // 1. Release locks if time passed
-        this.pool.forEach(cred => {
-            if (cred.status === 'RATE_LIMITED' && cred.cooldownUntil < now) {
-                cred.status = 'READY';
-            }
-        });
+        // 1. Refresh Pool States
+        this.getPool(); 
 
         // 2. Filter valid keys
         const available = this.pool.filter(c => c.status === 'READY');
@@ -89,12 +93,13 @@ class CredentialManagerService {
         }
 
         // 3. Sort by last used (Ascending) -> Use the one that rested the longest
+        // This ensures perfect Round-Robin distribution
         available.sort((a, b) => a.lastUsed - b.lastUsed);
 
         const chosen = available[0];
         
         // Update Usage
-        chosen.lastUsed = now;
+        chosen.lastUsed = Date.now();
         chosen.usageCount++;
         this.savePool();
         
@@ -105,16 +110,20 @@ class CredentialManagerService {
         const cred = this.pool.find(c => c.id === id);
         if (cred) {
             cred.status = 'RATE_LIMITED';
-            // Set cooldown for 10 minutes (Reddit reset time is usually 10m)
+            // Set cooldown for 10 minutes (Standard Reddit Reset)
             cred.cooldownUntil = Date.now() + (10 * 60 * 1000); 
             this.savePool();
-            logger.warn('NET', `Key ${id.substring(0,4)}... hit Rate Limit. Switched to cooldown.`);
+            logger.warn('NET', `Key ${id.substring(0,4)}... hit Rate Limit. Switched to cooldown (10m).`);
         }
     }
 
     public markSuccess(id: string) {
-        // Optional: Reset error counters if we were tracking them complexly
-        // For now, usage count is enough.
+        // We could track success rate here if needed
+        const cred = this.pool.find(c => c.id === id);
+        if (cred && cred.status !== 'READY') {
+            cred.status = 'READY'; // Recover if it was erroneously flagged
+            this.savePool();
+        }
     }
 }
 
