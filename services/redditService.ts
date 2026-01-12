@@ -2,12 +2,7 @@
 import { DatabaseService } from './databaseService';
 import { logger } from './logger';
 import { RedditComment } from '../types';
-
-/**
- * PRODUCTION REDDIT SERVICE
- * Handles Real Authentication and API Calls.
- * NOTE: Requires a "Script" type app on Reddit for username/password flow.
- */
+import { credentialManager } from './credentialManager';
 
 const REDDIT_AUTH_URL = 'https://www.reddit.com/api/v1/access_token';
 const REDDIT_API_URL = 'https://oauth.reddit.com';
@@ -19,38 +14,29 @@ interface TokenResponse {
     scope: string;
 }
 
-// Internal token storage
-let currentToken: string | null = null;
-let tokenExpiry: number = 0;
+// Memory Cache for Tokens: Map<CredentialID, Token>
+const tokenCache = new Map<string, { token: string, expiry: number }>();
 
 export const RedditService = {
     
     /**
-     * Authenticates with Reddit to get a Bearer Token.
-     * Uses the "Password Grant" flow suitable for scripts/bots.
+     * Authenticates using a specific credential from the pool.
      */
-    async authenticate(): Promise<string> {
-        // Check if current token is valid
-        if (currentToken && Date.now() < tokenExpiry) {
-            return currentToken;
+    async authenticate(credId: string): Promise<string> {
+        const cred = credentialManager.getPool().find(c => c.id === credId);
+        if (!cred) throw new Error("Credential not found in pool.");
+
+        // Check Cache
+        const cached = tokenCache.get(credId);
+        if (cached && Date.now() < cached.expiry) {
+            return cached.token;
         }
 
-        const clientId = localStorage.getItem('redditops_r_client');
-        const clientSecret = localStorage.getItem('redditops_r_secret');
-        const username = localStorage.getItem('redditops_r_username');
-        const password = localStorage.getItem('redditops_r_password');
-
-        if (!clientId || !clientSecret || !username || !password) {
-            throw new Error("بيانات Reddit مفقودة. يرجى الذهاب للإعدادات وتعبئة بيانات Bot.");
-        }
-
-        logger.info('REDDIT', `Authenticating as u/${username}...`);
-
-        const credentials = btoa(`${clientId}:${clientSecret}`);
+        const credentials = btoa(`${cred.clientId}:${cred.clientSecret}`);
         const formData = new URLSearchParams();
         formData.append('grant_type', 'password');
-        formData.append('username', username);
-        formData.append('password', password);
+        formData.append('username', cred.username);
+        formData.append('password', cred.password);
 
         try {
             const response = await fetch(REDDIT_AUTH_URL, {
@@ -58,32 +44,93 @@ export const RedditService = {
                 headers: {
                     'Authorization': `Basic ${credentials}`,
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'User-Agent': `web:redditops-platinum:v4.5 (by /u/${username})`
+                    'User-Agent': `web:redditops-platinum:v4.5 (Cluster Node)`
                 },
                 body: formData
             });
 
+            if (response.status === 429 || response.status === 401) {
+                throw new Error("AUTH_FAIL"); // Trigger rotation
+            }
+
             if (!response.ok) {
                 const errText = await response.text();
-                throw new Error(`Auth Failed: ${response.status} - ${errText}`);
+                throw new Error(`Auth Error: ${errText}`);
             }
 
             const data: TokenResponse = await response.json();
             
             if (data.access_token) {
-                currentToken = data.access_token;
-                // Expire 1 minute before actual expiry to be safe
-                tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000;
-                logger.success('REDDIT', 'Authentication Successful. Secure Link Established.');
-                return currentToken;
+                // Cache it
+                tokenCache.set(credId, {
+                    token: data.access_token,
+                    expiry: Date.now() + (data.expires_in * 1000) - 60000
+                });
+                return data.access_token;
             } else {
                 throw new Error("No access token returned.");
             }
 
         } catch (error) {
-            logger.error('REDDIT', `Authentication Critical Failure: ${(error as Error).message}`);
             throw error;
         }
+    },
+
+    /**
+     * Generic Wrapper to execute API calls with Rotation Logic
+     */
+    async executeRotatedCall<T>(operationName: string, apiCall: (token: string) => Promise<Response>): Promise<T> {
+        const maxRetries = 5; // We have a pool, so we can retry multiple times
+        let attempts = 0;
+
+        while (attempts < maxRetries) {
+            const cred = credentialManager.getOptimalCredential();
+            
+            if (!cred) {
+                throw new Error("All API Keys are currently exhausted/rate-limited. System Halted.");
+            }
+
+            try {
+                logger.info('REDDIT', `Node [${cred.id.substring(0,4)}] executing ${operationName}...`);
+                const token = await this.authenticate(cred.id);
+                
+                const response = await apiCall(token);
+
+                // Handle Rate Limits (429)
+                if (response.status === 429) {
+                    logger.warn('REDDIT', `Rate Limit Hit on Node ${cred.id}. Rotating...`);
+                    credentialManager.markRateLimited(cred.id);
+                    attempts++;
+                    continue; // Loop again to get a new credential
+                }
+
+                // Handle Auth Errors (401/403) - Maybe password changed or app revoked
+                if (response.status === 401 || response.status === 403) {
+                     logger.warn('REDDIT', `Auth Error on Node ${cred.id}. Marking exhausted.`);
+                     credentialManager.markRateLimited(cred.id); // Or mark bad
+                     attempts++;
+                     continue;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                credentialManager.markSuccess(cred.id);
+                const json = await response.json();
+                return json as T;
+
+            } catch (e: any) {
+                if (e.message === "AUTH_FAIL") {
+                    credentialManager.markRateLimited(cred.id);
+                    attempts++;
+                    continue;
+                }
+                throw e; // Real error (network, parsing, etc)
+            }
+        }
+
+        throw new Error("Max retries reached. Operation failed across multiple nodes.");
     },
 
     /**
@@ -91,36 +138,28 @@ export const RedditService = {
      */
     async getInbox(): Promise<RedditComment[]> {
         try {
-            const token = await this.authenticate();
-            logger.info('REDDIT', 'Fetching Inbox from Live API...');
+            const data: any = await this.executeRotatedCall('GetInbox', (token) => 
+                fetch(`${REDDIT_API_URL}/message/inbox?limit=10`, {
+                    headers: {
+                        'Authorization': `bearer ${token}`,
+                        'User-Agent': 'web:redditops-platinum:v4.5'
+                    }
+                })
+            );
 
-            const response = await fetch(`${REDDIT_API_URL}/message/inbox?limit=10`, {
-                headers: {
-                    'Authorization': `bearer ${token}`,
-                    'User-Agent': 'web:redditops-platinum:v4.5'
-                }
-            });
-
-            if (!response.ok) {
-                if (response.status === 403) throw new Error("Access Denied (403). Check account scopes.");
-                throw new Error(`API Error: ${response.status}`);
-            }
-
-            const data = await response.json();
-            
             // Map Reddit JSON to our Interface
             const mappedComments: RedditComment[] = data.data.children.map((child: any) => {
                 const item = child.data;
                 return {
-                    id: item.name, // e.g., t1_xxxx
+                    id: item.name, 
                     author: item.author,
                     body: item.body || item.subject || 'No Content',
                     subreddit: item.subreddit_name_prefixed || 'r/Private',
                     postTitle: item.link_title || item.subject || 'Direct Message',
                     permalink: item.context || '#',
                     createdUtc: item.created_utc,
-                    isReplied: !!item.likes, // Heuristic: we often upvote our own replies
-                    sentiment: 'Neutral' // Real sentiment requires AI analysis pass
+                    isReplied: !!item.likes,
+                    sentiment: 'Neutral'
                 };
             });
 
@@ -128,7 +167,6 @@ export const RedditService = {
 
         } catch (error) {
             logger.error('REDDIT', `Inbox Fetch Failed: ${(error as Error).message}`);
-            // Return empty array to not break UI, but toast handles error
             throw error;
         }
     },
@@ -138,34 +176,29 @@ export const RedditService = {
      */
     async postReply(thingId: string, text: string, recipient: string): Promise<boolean> {
         try {
-            const token = await this.authenticate();
-            logger.info('REDDIT', `Posting reply to ${thingId}...`);
+            const data: any = await this.executeRotatedCall('PostReply', (token) => {
+                const formData = new URLSearchParams();
+                formData.append('api_type', 'json');
+                formData.append('text', text);
+                formData.append('thing_id', thingId);
 
-            const formData = new URLSearchParams();
-            formData.append('api_type', 'json');
-            formData.append('text', text);
-            formData.append('thing_id', thingId);
-
-            const response = await fetch(`${REDDIT_API_URL}/api/comment`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `bearer ${token}`,
-                    'User-Agent': 'web:redditops-platinum:v4.5',
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: formData
+                return fetch(`${REDDIT_API_URL}/api/comment`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `bearer ${token}`,
+                        'User-Agent': 'web:redditops-platinum:v4.5',
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData
+                });
             });
 
-            const data = await response.json();
-
-            // Reddit returns 200 even on some logical errors, check json.errors
             if (data.json && data.json.errors && data.json.errors.length > 0) {
                 throw new Error(`Reddit API Error: ${data.json.errors[0][1]}`);
             }
 
             logger.success('REDDIT', `Reply deployed successfully.`);
             
-            // Archive to Firestore for record keeping
             await DatabaseService.deployCampaignContent(
                 'direct_reply',
                 text,

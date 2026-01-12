@@ -30,6 +30,18 @@ export interface RedditAccount {
   };
 }
 
+export interface RedditCredential {
+    id: string;
+    clientId: string;
+    clientSecret: string;
+    username: string;
+    password: string; // Stored locally
+    usageCount: number;
+    status: 'READY' | 'RATE_LIMITED' | 'EXHAUSTED';
+    lastUsed: number;
+    cooldownUntil: number; // Timestamp when rate limit expires
+}
+
 export interface RedditComment {
   id: string;
   author: string;

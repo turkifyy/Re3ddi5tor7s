@@ -2,9 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { useToast } from './ToastProvider';
-import { Settings, Shield, Server, Wifi, Database, Activity, AlertTriangle, RefreshCw, Eye, Key, Save, Lock, MessageCircle, User } from 'lucide-react';
+import { Settings, Shield, Server, Wifi, Database, Activity, AlertTriangle, RefreshCw, Eye, Key, Save, Lock, MessageCircle, User, Plus, Trash2, Cpu, CheckCircle2 } from 'lucide-react';
 import { isFirebaseConfigured, initializeFirebase } from '../services/firebase';
 import { setDeepSeekKey, getDeepSeekKey } from '../services/deepseekService';
+import { credentialManager } from '../services/credentialManager';
+import { RedditCredential } from '../types';
 
 interface SettingsManagerProps {
     onLogout: () => void;
@@ -18,25 +20,28 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
   // Keys State
   const [dsKey, setDsKey] = useState('');
   
-  // Reddit API State
-  const [redditClientId, setRedditClientId] = useState('');
-  const [redditSecret, setRedditSecret] = useState('');
-  const [redditUsername, setRedditUsername] = useState('');
-  const [redditPassword, setRedditPassword] = useState('');
+  // Reddit Credential Pool State
+  const [credPool, setCredPool] = useState<RedditCredential[]>([]);
+  const [newClient, setNewClient] = useState('');
+  const [newSecret, setNewSecret] = useState('');
+  const [newUser, setNewUser] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [isAddingCred, setIsAddingCred] = useState(false);
 
   // Firebase Config State (Loaded from localStorage)
   const [fbProjectId, setFbProjectId] = useState('');
   const [fbApiKey, setFbApiKey] = useState('');
 
+  const loadCredentials = () => {
+      setCredPool([...credentialManager.getPool()]);
+  };
+
   useEffect(() => {
       // Load DeepSeek Key
       setDsKey(getDeepSeekKey());
 
-      // Load Reddit Keys
-      setRedditClientId(localStorage.getItem('redditops_r_client') || '');
-      setRedditSecret(localStorage.getItem('redditops_r_secret') || '');
-      setRedditUsername(localStorage.getItem('redditops_r_username') || '');
-      setRedditPassword(localStorage.getItem('redditops_r_password') || '');
+      // Load Credential Pool
+      loadCredentials();
 
       // Load Firebase Config
       const storedConfig = localStorage.getItem('redditops_fb_config');
@@ -54,16 +59,32 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
       addToast('success', 'تم تحديث مفتاح DeepSeek وحفظه.');
   };
 
-  const handleSaveRedditKeys = () => {
-      if(!redditClientId || !redditSecret || !redditUsername || !redditPassword) {
-          addToast('error', 'جميع حقول Reddit مطلوبة للاتصال الحقيقي.');
+  const handleAddCredential = () => {
+      if (!newClient || !newSecret || !newUser || !newPass) {
+          addToast('error', 'جميع الحقول مطلوبة لإضافة مفتاح API.');
           return;
       }
-      localStorage.setItem('redditops_r_client', redditClientId.trim());
-      localStorage.setItem('redditops_r_secret', redditSecret.trim());
-      localStorage.setItem('redditops_r_username', redditUsername.trim());
-      localStorage.setItem('redditops_r_password', redditPassword.trim());
-      addToast('success', 'تم حفظ بيانات Reddit API وتجهيز بروتوكول المصادقة.');
+      credentialManager.addCredential({
+          clientId: newClient.trim(),
+          clientSecret: newSecret.trim(),
+          username: newUser.trim(),
+          password: newPass.trim()
+      });
+      addToast('success', 'تمت إضافة المفتاح إلى مجمع التدوير (Rotation Pool).');
+      setNewClient('');
+      setNewSecret('');
+      setNewUser('');
+      setNewPass('');
+      setIsAddingCred(false);
+      loadCredentials();
+  };
+
+  const handleRemoveCredential = (id: string) => {
+      if(confirm('هل أنت متأكد من إزالة هذا المفتاح من المجمع؟')) {
+          credentialManager.removeCredential(id);
+          loadCredentials();
+          addToast('info', 'تمت إزالة المفتاح.');
+      }
   };
 
   const handleSaveFirebaseConfig = async () => {
@@ -144,15 +165,15 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
                 <div className="flex justify-between items-center p-4 bg-white/5 rounded-xl border border-white/5">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-slate-900 rounded-lg border border-white/10">
-                            <Activity className="w-5 h-5 text-violet-400" />
+                            <Cpu className="w-5 h-5 text-violet-400" />
                         </div>
                         <div>
-                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Reddit Uplink</div>
-                            <div className="text-sm font-mono text-white">OAuth2 Gateway</div>
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">خوادم API Reddit</div>
+                            <div className="text-sm font-mono text-white">Load Balancing ({credPool.length} Nodes)</div>
                         </div>
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${redditClientId && redditUsername ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'}`}>
-                        {redditClientId && redditUsername ? 'جاهز' : 'غير مهيأ'}
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${credPool.some(c => c.status === 'READY') ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'}`}>
+                        {credPool.some(c => c.status === 'READY') ? 'نشط' : 'متوقف'}
                     </div>
                 </div>
             </div>
@@ -191,68 +212,108 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
             </div>
         </div>
 
-        {/* Reddit Integration Settings */}
+        {/* Advanced Reddit Key Pool Manager */}
         <div className="glass-panel rounded-2xl p-8 border border-white/5 lg:col-span-2">
-            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-                <MessageCircle className="w-5 h-5 text-orange-400" />
-                Reddit API Integration (تكوين البوت)
-            </h3>
-            <div className="p-4 mb-6 bg-orange-500/5 border border-orange-500/10 rounded-lg text-xs text-orange-200 leading-relaxed">
-                تنبيه: يتطلب النظام حساب Reddit من نوع <b>Script App</b> للعمل في الخلفية. تأكد من أن الحساب يملك صلاحيات النشر.
-                يتم استخدام البيانات لتوليد <b>Bearer Token</b> للتواصل المباشر مع سيرفرات Reddit.
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Client ID</label>
-                    <input 
-                        value={redditClientId}
-                        onChange={(e) => setRedditClientId(e.target.value)}
-                        className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none font-mono"
-                        placeholder="e.g., kX9_..."
-                    />
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                        <MessageCircle className="w-5 h-5 text-orange-400" />
+                        نظام تدوير المفاتيح (Smart API Key Rotation)
+                    </h3>
+                    <p className="text-slate-500 text-xs mt-1">
+                        إدارة مجمع المفاتيح (Quota Pool) لتفادي الحظر. يقوم النظام بالتبديل تلقائياً عند استنفاد الرصيد المجاني.
+                    </p>
                 </div>
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Client Secret</label>
-                    <input 
-                        type="password"
-                        value={redditSecret}
-                        onChange={(e) => setRedditSecret(e.target.value)}
-                        className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none font-mono"
-                        placeholder="Secret key..."
-                    />
-                </div>
-                
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                        <User className="w-3 h-3" /> اسم المستخدم (Bot/User)
-                    </label>
-                    <input 
-                        value={redditUsername}
-                        onChange={(e) => setRedditUsername(e.target.value)}
-                        className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none font-mono"
-                        placeholder="u/username_without_slash"
-                    />
-                </div>
-                 <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                        <Key className="w-3 h-3" /> كلمة مرور الحساب
-                    </label>
-                    <input 
-                        type="password"
-                        value={redditPassword}
-                        onChange={(e) => setRedditPassword(e.target.value)}
-                        className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none font-mono"
-                        placeholder="Reddit Password"
-                    />
-                </div>
-            </div>
-            <div className="flex justify-end mt-6">
-                 <Button onClick={handleSaveRedditKeys} variant="primary" size="sm">
-                    <Save className="w-4 h-4 ml-2" />
-                    حفظ وتهيئة المصادقة
+                <Button size="sm" onClick={() => setIsAddingCred(!isAddingCred)} variant={isAddingCred ? 'secondary' : 'primary'}>
+                    {isAddingCred ? 'إلغاء' : 'إضافة مفتاح جديد'}
                 </Button>
             </div>
+
+            {/* Add Credential Form */}
+            {isAddingCred && (
+                <div className="bg-orange-500/5 border border-orange-500/10 rounded-xl p-6 mb-6 animate-in slide-in-from-top-4">
+                    <h4 className="text-orange-200 font-bold text-sm mb-4 flex items-center gap-2">
+                        <Plus className="w-4 h-4" /> بيانات التطبيق الجديد
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Client ID</label>
+                            <input value={newClient} onChange={e => setNewClient(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded p-2 text-white text-xs font-mono" placeholder="Ex: kX9_..." />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Client Secret</label>
+                            <input type="password" value={newSecret} onChange={e => setNewSecret(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded p-2 text-white text-xs font-mono" placeholder="Secret Key" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Reddit Username</label>
+                            <input value={newUser} onChange={e => setNewUser(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded p-2 text-white text-xs font-mono" placeholder="u/BotName" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Password</label>
+                            <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded p-2 text-white text-xs font-mono" placeholder="Account Password" />
+                        </div>
+                    </div>
+                    <div className="flex justify-end mt-4">
+                        <Button size="sm" onClick={handleAddCredential}>حفظ وإدراج في الشبكة</Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Credentials List (The Rack) */}
+            <div className="space-y-3">
+                {credPool.length === 0 ? (
+                    <div className="text-center py-12 border border-white/5 border-dashed rounded-xl">
+                        <MessageCircle className="w-10 h-10 text-slate-700 mx-auto mb-3" />
+                        <p className="text-slate-500 text-sm">مجمع المفاتيح فارغ. أضف مفتاحاً واحداً على الأقل للعمل.</p>
+                    </div>
+                ) : (
+                    credPool.map((cred, idx) => (
+                        <div key={cred.id} className="flex flex-col md:flex-row items-center justify-between p-4 bg-[#0b0f19] border border-white/5 rounded-xl hover:border-white/10 transition-colors group">
+                             <div className="flex items-center gap-4 w-full md:w-auto mb-3 md:mb-0">
+                                <div className={`w-2 h-12 rounded-full ${
+                                    cred.status === 'READY' ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 
+                                    cred.status === 'RATE_LIMITED' ? 'bg-orange-500 shadow-[0_0_10px_#f97316]' : 'bg-red-500'
+                                }`}></div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-white font-bold text-sm">Node #{idx + 1}</span>
+                                        <span className="text-xs text-slate-500 font-mono bg-white/5 px-1.5 rounded">{cred.username}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1 font-mono">
+                                        <span>ID: {cred.clientId.substring(0,6)}...</span>
+                                        <span className="text-slate-600">|</span>
+                                        <span>Used: {cred.usageCount} times</span>
+                                        {cred.status === 'RATE_LIMITED' && (
+                                            <span className="text-orange-400 animate-pulse">
+                                                [COOLDOWN: {Math.ceil((cred.cooldownUntil - Date.now()) / 60000)}m]
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                             </div>
+                             
+                             <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                <div className="text-right mr-4 hidden md:block">
+                                    <div className="text-[10px] text-slate-500 uppercase tracking-wider">Status</div>
+                                    <div className={`text-xs font-bold ${cred.status === 'READY' ? 'text-green-400' : 'text-orange-400'}`}>{cred.status}</div>
+                                </div>
+                                <button 
+                                    onClick={() => handleRemoveCredential(cred.id)}
+                                    className="p-2 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                             </div>
+                        </div>
+                    ))
+                )}
+            </div>
+            {credPool.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+                    <span>Active Nodes: {credPool.filter(c => c.status === 'READY').length} / {credPool.length}</span>
+                    <span className="flex items-center gap-1 text-primary-500"><CheckCircle2 className="w-3 h-3" /> Auto-Rotation Active</span>
+                </div>
+            )}
         </div>
 
         {/* AI Configuration */}
