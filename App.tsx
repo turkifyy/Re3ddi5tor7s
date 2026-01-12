@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { AccountManager } from './components/AccountManager';
 import { CampaignManager } from './components/CampaignManager';
+import { InboxManager } from './components/InboxManager';
 import { SettingsManager } from './components/SettingsManager';
 import { TerminalLog } from './components/TerminalLog';
 import { ToastProvider } from './components/ToastProvider';
@@ -65,6 +67,8 @@ function App() {
         return <AccountManager />;
       case 'CAMPAIGNS':
         return <CampaignManager />;
+      case 'INBOX':
+        return <InboxManager />;
       case 'LOGS':
         return (
           <div className="h-full flex flex-col p-4">

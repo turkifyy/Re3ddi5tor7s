@@ -1,3 +1,4 @@
+
 export enum AccountStatus {
   ACTIVE = 'ACTIVE',
   RESTING = 'RESTING',
@@ -29,6 +30,18 @@ export interface RedditAccount {
   };
 }
 
+export interface RedditComment {
+  id: string;
+  author: string;
+  body: string;
+  subreddit: string;
+  postTitle: string;
+  permalink: string;
+  createdUtc: number;
+  isReplied: boolean;
+  sentiment?: 'Positive' | 'Negative' | 'Neutral';
+}
+
 export interface Campaign {
   id: string;
   name: string;
@@ -43,7 +56,7 @@ export interface SystemLog {
   id: string;
   timestamp: string;
   level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS';
-  module: 'AAO' | 'CASE' | 'SYS' | 'NET' | 'DB' | 'AI' | 'AUTH';
+  module: 'AAO' | 'CASE' | 'SYS' | 'NET' | 'DB' | 'AI' | 'AUTH' | 'REDDIT';
   message: string;
 }
 
@@ -60,4 +73,4 @@ export interface AiGenerationRequest {
   model: string;
 }
 
-export type ViewState = 'DASHBOARD' | 'ACCOUNTS' | 'CAMPAIGNS' | 'LOGS' | 'SETTINGS';
+export type ViewState = 'DASHBOARD' | 'ACCOUNTS' | 'CAMPAIGNS' | 'INBOX' | 'LOGS' | 'SETTINGS';

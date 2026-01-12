@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { ViewState, UserProfile } from '../types';
-import { LayoutDashboard, Users, Target, Terminal, Settings, LogOut, Cpu, Radio, Menu, X, ShieldCheck, User } from 'lucide-react';
+import { LayoutDashboard, Users, Target, Terminal, Settings, LogOut, Cpu, Radio, Menu, X, ShieldCheck, User, MessageCircle } from 'lucide-react';
 import { TerminalLog } from './TerminalLog';
 
 interface LayoutProps {
@@ -18,6 +19,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onNavigat
     { id: 'DASHBOARD', label: 'لوحة القيادة', icon: LayoutDashboard },
     { id: 'ACCOUNTS', label: 'مصفوفة الهويات', icon: Users },
     { id: 'CAMPAIGNS', label: 'العمليات المستهدفة', icon: Target },
+    { id: 'INBOX', label: 'الرد المباشر', icon: MessageCircle },
     { id: 'LOGS', label: 'نواة النظام', icon: Terminal },
   ];
 

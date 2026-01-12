@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { useToast } from './ToastProvider';
-import { Settings, Shield, Server, Wifi, Database, Activity, AlertTriangle, RefreshCw, Eye, Key, Save, Lock } from 'lucide-react';
+import { Settings, Shield, Server, Wifi, Database, Activity, AlertTriangle, RefreshCw, Eye, Key, Save, Lock, MessageCircle, User } from 'lucide-react';
 import { isFirebaseConfigured, initializeFirebase } from '../services/firebase';
 import { setDeepSeekKey, getDeepSeekKey } from '../services/deepseekService';
 
@@ -17,6 +18,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
   // Keys State
   const [dsKey, setDsKey] = useState('');
   
+  // Reddit API State
+  const [redditClientId, setRedditClientId] = useState('');
+  const [redditSecret, setRedditSecret] = useState('');
+  const [redditUsername, setRedditUsername] = useState('');
+  const [redditPassword, setRedditPassword] = useState('');
+
   // Firebase Config State (Loaded from localStorage)
   const [fbProjectId, setFbProjectId] = useState('');
   const [fbApiKey, setFbApiKey] = useState('');
@@ -25,7 +32,13 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
       // Load DeepSeek Key
       setDsKey(getDeepSeekKey());
 
-      // Load Firebase Config (Parse from LocalStorage directly as a fallback to show current config)
+      // Load Reddit Keys
+      setRedditClientId(localStorage.getItem('redditops_r_client') || '');
+      setRedditSecret(localStorage.getItem('redditops_r_secret') || '');
+      setRedditUsername(localStorage.getItem('redditops_r_username') || '');
+      setRedditPassword(localStorage.getItem('redditops_r_password') || '');
+
+      // Load Firebase Config
       const storedConfig = localStorage.getItem('redditops_fb_config');
       if (storedConfig) {
           try {
@@ -39,6 +52,18 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
   const handleSaveAiKey = () => {
       setDeepSeekKey(dsKey);
       addToast('success', 'تم تحديث مفتاح DeepSeek وحفظه.');
+  };
+
+  const handleSaveRedditKeys = () => {
+      if(!redditClientId || !redditSecret || !redditUsername || !redditPassword) {
+          addToast('error', 'جميع حقول Reddit مطلوبة للاتصال الحقيقي.');
+          return;
+      }
+      localStorage.setItem('redditops_r_client', redditClientId.trim());
+      localStorage.setItem('redditops_r_secret', redditSecret.trim());
+      localStorage.setItem('redditops_r_username', redditUsername.trim());
+      localStorage.setItem('redditops_r_password', redditPassword.trim());
+      addToast('success', 'تم حفظ بيانات Reddit API وتجهيز بروتوكول المصادقة.');
   };
 
   const handleSaveFirebaseConfig = async () => {
@@ -65,13 +90,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
       }
   };
 
-  const handleClearCache = () => {
-    addToast('info', 'جاري تنظيف الذاكرة المؤقتة...');
-    setTimeout(() => {
-        addToast('success', 'تم تنظيف ذاكرة التخزين المؤقت وتحسين الأداء.');
-    }, 1500);
-  };
-
   const toggleAnimations = () => {
       setAnimationsEnabled(!animationsEnabled);
       if (animationsEnabled) {
@@ -84,7 +102,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
@@ -129,18 +147,18 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
                             <Activity className="w-5 h-5 text-violet-400" />
                         </div>
                         <div>
-                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">محرك الذكاء الاصطناعي</div>
-                            <div className="text-sm font-mono text-white">DeepSeek-V3 API</div>
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Reddit Uplink</div>
+                            <div className="text-sm font-mono text-white">OAuth2 Gateway</div>
                         </div>
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${dsKey ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'}`}>
-                        {dsKey ? 'مهيأ' : 'مطلوب'}
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${redditClientId && redditUsername ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'}`}>
+                        {redditClientId && redditUsername ? 'جاهز' : 'غير مهيأ'}
                     </div>
                 </div>
             </div>
         </div>
 
-        {/* Server Configuration (Moved Here) */}
+        {/* Server Configuration */}
         <div className="glass-panel rounded-2xl p-8 border border-white/5">
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
                 <Server className="w-5 h-5 text-slate-200" />
@@ -169,6 +187,70 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
                 <Button onClick={handleSaveFirebaseConfig} variant="secondary" className="w-full mt-2">
                     <RefreshCw className="w-4 h-4 ml-2" />
                     تحديث الاتصال وإعادة التشغيل
+                </Button>
+            </div>
+        </div>
+
+        {/* Reddit Integration Settings */}
+        <div className="glass-panel rounded-2xl p-8 border border-white/5 lg:col-span-2">
+            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-orange-400" />
+                Reddit API Integration (تكوين البوت)
+            </h3>
+            <div className="p-4 mb-6 bg-orange-500/5 border border-orange-500/10 rounded-lg text-xs text-orange-200 leading-relaxed">
+                تنبيه: يتطلب النظام حساب Reddit من نوع <b>Script App</b> للعمل في الخلفية. تأكد من أن الحساب يملك صلاحيات النشر.
+                يتم استخدام البيانات لتوليد <b>Bearer Token</b> للتواصل المباشر مع سيرفرات Reddit.
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Client ID</label>
+                    <input 
+                        value={redditClientId}
+                        onChange={(e) => setRedditClientId(e.target.value)}
+                        className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none font-mono"
+                        placeholder="e.g., kX9_..."
+                    />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Client Secret</label>
+                    <input 
+                        type="password"
+                        value={redditSecret}
+                        onChange={(e) => setRedditSecret(e.target.value)}
+                        className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none font-mono"
+                        placeholder="Secret key..."
+                    />
+                </div>
+                
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <User className="w-3 h-3" /> اسم المستخدم (Bot/User)
+                    </label>
+                    <input 
+                        value={redditUsername}
+                        onChange={(e) => setRedditUsername(e.target.value)}
+                        className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none font-mono"
+                        placeholder="u/username_without_slash"
+                    />
+                </div>
+                 <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <Key className="w-3 h-3" /> كلمة مرور الحساب
+                    </label>
+                    <input 
+                        type="password"
+                        value={redditPassword}
+                        onChange={(e) => setRedditPassword(e.target.value)}
+                        className="w-full bg-slate-900 border border-white/10 rounded-lg p-3 text-white text-sm focus:border-primary-500 focus:outline-none font-mono"
+                        placeholder="Reddit Password"
+                    />
+                </div>
+            </div>
+            <div className="flex justify-end mt-6">
+                 <Button onClick={handleSaveRedditKeys} variant="primary" size="sm">
+                    <Save className="w-4 h-4 ml-2" />
+                    حفظ وتهيئة المصادقة
                 </Button>
             </div>
         </div>
