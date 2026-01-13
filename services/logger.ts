@@ -1,3 +1,4 @@
+
 import { SystemLog } from '../types';
 
 type LogListener = (log: SystemLog) => void;
@@ -40,6 +41,20 @@ class LoggerService {
     return this.lastLatency;
   }
 
+  // --- NEW REAL PRODUCTION FEATURE: Memory Cleanup ---
+  pruneLogs(keepLast: number = 50): number {
+      const initialCount = this.logs.length;
+      if (initialCount <= keepLast) return 0;
+      
+      // Keep only the last N logs
+      this.logs = this.logs.slice(-keepLast);
+      const removedCount = initialCount - this.logs.length;
+      
+      // We don't notify listeners here to avoid UI redraw loops, 
+      // the UI component usually manages its own slice or subscribes to new events.
+      return removedCount;
+  }
+
   log(level: SystemLog['level'], module: SystemLog['module'], message: string) {
     const newLog: SystemLog = {
       id: Math.random().toString(36).substring(7),
@@ -50,8 +65,8 @@ class LoggerService {
     };
     
     this.logs.push(newLog);
-    // Keep only last 100 in memory
-    if (this.logs.length > 100) this.logs.shift();
+    // Keep only last 200 in memory buffer to prevent leaks
+    if (this.logs.length > 200) this.logs.shift();
     
     this.notify(newLog);
     

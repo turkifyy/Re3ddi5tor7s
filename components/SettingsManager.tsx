@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { useToast } from './ToastProvider';
-import { Settings, Shield, Server, Wifi, Database, Activity, AlertTriangle, RefreshCw, Eye, Key, Save, Lock, MessageCircle, User, Plus, Trash2, Cpu, CheckCircle2, Zap } from 'lucide-react';
+import { Settings, Shield, Server, Wifi, Database, Activity, AlertTriangle, RefreshCw, Eye, Key, Save, Lock, MessageCircle, User, Plus, Trash2, Cpu, CheckCircle2, Zap, Clock, PlayCircle } from 'lucide-react';
 import { isFirebaseConfigured, initializeFirebase } from '../services/firebase';
 import { setDeepSeekKey, getDeepSeekKey } from '../services/deepseekService';
 import { credentialManager } from '../services/credentialManager';
 import { RedditService } from '../services/redditService';
-import { RedditCredential } from '../types';
+import { cronService } from '../services/cronService';
+import { RedditCredential, CronJob } from '../types';
 
 interface SettingsManagerProps {
     onLogout: () => void;
@@ -30,6 +31,9 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
   const [isAddingCred, setIsAddingCred] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
 
+  // Cron State
+  const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
+
   // Firebase Config State (Loaded from localStorage)
   const [fbProjectId, setFbProjectId] = useState('');
   const [fbApiKey, setFbApiKey] = useState('');
@@ -38,12 +42,22 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
       setCredPool([...credentialManager.getPool()]);
   };
 
+  const loadCronJobs = () => {
+      setCronJobs([...cronService.getJobs()]);
+  };
+
   useEffect(() => {
       // Load DeepSeek Key
       setDsKey(getDeepSeekKey());
 
       // Load Credential Pool
       loadCredentials();
+      
+      // Load Cron Jobs
+      loadCronJobs();
+
+      // Poll Cron UI updates
+      const interval = setInterval(loadCronJobs, 1000); // Faster polling for better UX
 
       // Load Firebase Config
       const storedConfig = localStorage.getItem('redditops_fb_config');
@@ -54,11 +68,27 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
               setFbApiKey(conf.apiKey || '');
           } catch(e) {}
       }
+
+      return () => clearInterval(interval);
   }, []);
 
   const handleSaveAiKey = () => {
       setDeepSeekKey(dsKey);
       addToast('success', 'تم تحديث مفتاح DeepSeek وحفظه.');
+  };
+
+  const handleForceRunJob = async (id: string) => {
+      addToast('info', 'جاري إرسال إشارة تنفيذ قسري للمهمة...');
+      
+      // Optimistic Update: Set status to RUNNING locally immediately for instant feedback
+      setCronJobs(prev => prev.map(job => 
+          job.id === id ? { ...job, status: 'RUNNING' } : job
+      ));
+
+      // Execute without blocking the UI heavily, relying on polling to catch the 'SUCCESS' later
+      cronService.forceRun(id).then(() => {
+          loadCronJobs(); // Refresh immediately after finish
+      });
   };
 
   const handleAddCredential = () => {
@@ -229,6 +259,59 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onLogout }) =>
                     <RefreshCw className="w-4 h-4 ml-2" />
                     تحديث الاتصال وإعادة التشغيل
                 </Button>
+            </div>
+        </div>
+
+        {/* CRON JOB MANAGER (NEW) */}
+        <div className="glass-panel rounded-2xl p-8 border border-white/5 lg:col-span-2">
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-blue-400" />
+                        مدير المهام المجدولة (Cron Scheduler)
+                    </h3>
+                    <p className="text-slate-500 text-xs mt-1">
+                        إدارة المهام الخلفية التي تعمل في أوقات محددة (تنظيف، مزامنة، فحص صحة).
+                    </p>
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                {cronJobs.map((job) => (
+                     <div key={job.id} className="flex flex-col md:flex-row items-center justify-between p-4 bg-[#0b0f19] border border-white/5 rounded-xl hover:border-blue-500/20 transition-all group">
+                         <div className="flex items-center gap-4 w-full md:w-auto">
+                            <div className={`p-2 rounded-lg bg-slate-900 border border-white/10 ${job.status === 'RUNNING' ? 'text-blue-400 animate-spin' : job.status === 'FAILED' ? 'text-red-400' : 'text-slate-400'}`}>
+                                <RefreshCw className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <div className="text-white font-bold text-sm flex items-center gap-2">
+                                    {job.name}
+                                    <span className="text-[10px] bg-white/5 px-1.5 py-0.5 rounded text-slate-400">{job.interval}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-mono mt-1">
+                                    Next: {new Date(job.nextRun).toLocaleTimeString('ar-EG')} | Last: {job.lastRun === 0 ? 'NEVER' : new Date(job.lastRun).toLocaleTimeString('ar-EG')}
+                                </div>
+                            </div>
+                         </div>
+                         <div className="flex items-center gap-3 w-full md:w-auto justify-end mt-3 md:mt-0">
+                             <span className={`text-[10px] font-bold ${
+                                 job.status === 'IDLE' ? 'text-slate-500' : 
+                                 job.status === 'RUNNING' ? 'text-blue-400' : 
+                                 job.status === 'SUCCESS' ? 'text-green-400' : 'text-red-400'
+                             }`}>
+                                 {job.status}
+                             </span>
+                             <button 
+                                onClick={() => handleForceRunJob(job.id)}
+                                disabled={job.status === 'RUNNING'}
+                                className="p-2 hover:bg-blue-500/10 text-slate-400 hover:text-blue-400 rounded-lg transition-colors disabled:opacity-50"
+                                title="Force Execution"
+                             >
+                                 <PlayCircle className="w-4 h-4" />
+                             </button>
+                         </div>
+                     </div>
+                ))}
             </div>
         </div>
 

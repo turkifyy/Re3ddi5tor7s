@@ -14,6 +14,7 @@ import { isFirebaseConfigured, getAuthInstance } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { AuthService } from './services/authService';
 import { roboticsEngine } from './services/roboticsEngine';
+import { cronService } from './services/cronService';
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
@@ -26,11 +27,13 @@ function App() {
       setIsConfigured(isFirebaseConfigured());
       setLoadingAuth(false);
       
-      // Start Robotics Engine
+      // Start Robotics Engine & Cron Scheduler
       roboticsEngine.startEngine();
+      cronService.start();
 
       return () => {
           roboticsEngine.stopEngine();
+          cronService.stop();
       };
   }, []);
 

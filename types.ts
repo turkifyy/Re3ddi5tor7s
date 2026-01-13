@@ -68,7 +68,7 @@ export interface SystemLog {
   id: string;
   timestamp: string;
   level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS';
-  module: 'AAO' | 'CASE' | 'SYS' | 'NET' | 'DB' | 'AI' | 'AUTH' | 'REDDIT' | 'BOT';
+  module: 'AAO' | 'CASE' | 'SYS' | 'NET' | 'DB' | 'AI' | 'AUTH' | 'REDDIT' | 'BOT' | 'CRON';
   message: string;
 }
 
@@ -103,6 +103,20 @@ export interface RoboticsState {
     uptime: number;
     activeAgents: number;
     nextMaintenance: string;
+}
+
+// --- CRON TYPES ---
+export type CronInterval = 'EVERY_MINUTE' | 'EVERY_5_MINUTES' | 'HOURLY' | 'DAILY' | 'WEEKLY';
+
+export interface CronJob {
+    id: string;
+    name: string;
+    description: string;
+    interval: CronInterval;
+    lastRun: number; // Timestamp
+    nextRun: number; // Timestamp
+    status: 'IDLE' | 'RUNNING' | 'FAILED' | 'SUCCESS';
+    enabled: boolean;
 }
 
 export type ViewState = 'DASHBOARD' | 'ACCOUNTS' | 'CAMPAIGNS' | 'INBOX' | 'LOGS' | 'SETTINGS';

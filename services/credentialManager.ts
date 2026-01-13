@@ -1,6 +1,7 @@
 
 import { RedditCredential } from '../types';
 import { logger } from './logger';
+import { RedditService } from './redditService'; // Import Service
 
 const STORAGE_KEY = 'redditops_credential_pool';
 
@@ -124,6 +125,36 @@ class CredentialManagerService {
             cred.status = 'READY'; // Recover if it was erroneously flagged
             this.savePool();
         }
+    }
+
+    /**
+     * REAL PRODUCTION CHECK: Iterates through pool and verifies validity.
+     * Used by Cron Service.
+     */
+    public async performDeepHealthCheck(): Promise<string> {
+        let good = 0;
+        let bad = 0;
+
+        for (const cred of this.pool) {
+            try {
+                // Verify directly with RedditService
+                const isValid = await RedditService.verifyCredential(cred.id);
+                if (isValid) {
+                    good++;
+                    if (cred.status !== 'READY') {
+                        cred.status = 'READY'; // Heal it
+                    }
+                } else {
+                    bad++;
+                    cred.status = 'EXHAUSTED'; // Kill it
+                }
+            } catch (e) {
+                bad++;
+            }
+        }
+        
+        this.savePool();
+        return `Audit Complete: ${good} Healthy, ${bad} Failed/Removed`;
     }
 }
 
