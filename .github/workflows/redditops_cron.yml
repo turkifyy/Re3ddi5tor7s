@@ -1,0 +1,33 @@
+
+name: RedditOps Production Cron
+
+on:
+  schedule:
+    # Runs every 4 hours to catch new trends
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  system-maintenance:
+    runs-on: ubuntu-latest
+    name: "System Pulse & Auto-Engagement"
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm install firebase-admin
+
+      - name: Run Hunter-Killer Bot
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }} 
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          # NEW: Required for Auto-Replies
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: node scripts/server-bot.js
