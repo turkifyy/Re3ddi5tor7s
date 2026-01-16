@@ -1,0 +1,140 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#020617" />
+    <meta name="description" content="RedditOps Platinum V6.0: Enterprise Autonomous Orchestration Suite powered by DeepSeek AI & Firebase (Mission Critical Release)." />
+    
+    <!-- Open Graph / Social Media Meta Tags -->
+    <meta property="og:title" content="RedditOps Platinum V6.0 [LIVE]" />
+    <meta property="og:description" content="Advanced AI-driven Reddit orchestration and analytics platform - Real-time Production Environment." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&q=80&w=1200" />
+    
+    <title>RedditOps Platinum V6.0 - بيئة الإنتاج الحية</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Cairo', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              slate: {
+                800: '#1e293b',
+                850: '#0f172a',
+                900: '#020617',
+                950: '#000000',
+              },
+              primary: {
+                400: '#00f0ff',
+                500: '#00dbe8',
+                600: '#00a8b3',
+              },
+              violet: {
+                500: '#bc13fe',
+                600: '#9c0ce3',
+              },
+              success: {
+                500: '#00ff9d',
+              }
+            },
+            backgroundImage: {
+              'grid-pattern': "linear-gradient(to right, #1e293b 1px, transparent 1px), linear-gradient(to bottom, #1e293b 1px, transparent 1px)",
+            }
+          }
+        },
+        darkMode: 'class',
+      }
+    </script>
+    <style>
+      :root {
+        --grid-color: rgba(0, 240, 255, 0.03);
+        --bg-color: #020617;
+      }
+
+      body {
+        background-color: var(--bg-color);
+        background-image: 
+          radial-gradient(circle at 50% -20%, #1e293b 0%, #020617 80%),
+          linear-gradient(var(--grid-color) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+        background-size: 100% 100%, 50px 50px, 50px 50px;
+        background-attachment: fixed, fixed, fixed;
+        color: #f8fafc;
+        overflow: hidden;
+      }
+
+      /* RTL Specific Scrollbar fix */
+      .custom-scrollbar {
+        direction: ltr; /* Keep scrollbar on right usually preferred, or rtl for left */
+      }
+      .custom-scrollbar > * {
+        direction: rtl;
+      }
+
+      .glass-panel {
+        background: rgba(8, 12, 24, 0.7);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+      }
+
+      .glass-card {
+        background: rgba(30, 41, 59, 0.2);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.03);
+        transition: all 0.4s ease;
+      }
+      .glass-card:hover {
+        transform: translateY(-4px);
+        background: rgba(30, 41, 59, 0.4);
+        border-color: rgba(0, 240, 255, 0.3);
+      }
+
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #020617; }
+      ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #00f0ff; }
+
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover, 
+      input:-webkit-autofill:focus, 
+      input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 30px #0b0f19 inset !important;
+        -webkit-text-fill-color: white !important;
+        caret-color: white;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "firebase/": "https://esm.sh/firebase@^12.8.0/",
+    "module": "https://esm.sh/module@^2.0.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
