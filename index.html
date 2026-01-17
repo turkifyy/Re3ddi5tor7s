@@ -1,0 +1,182 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-bs-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#030712" />
+    <meta name="description" content="RedditOps Platinum V6.0: Enterprise Autonomous Orchestration Suite." />
+    
+    <title>RedditOps Platinum V6.0 - HyperVisor</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+      /* --- GLOBAL RESET & THEME --- */
+      :root {
+        --primary-neon: #00f3ff;    /* Cyber Cyan */
+        --secondary-neon: #bc13fe;  /* Electric Purple */
+        --bg-dark: #02040a;
+        --glass-surface: rgba(13, 17, 23, 0.7);
+        --glass-border: rgba(255, 255, 255, 0.08);
+      }
+
+      html, body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        font-family: 'Cairo', sans-serif;
+        background-color: var(--bg-dark);
+        color: #e2e8f0;
+        min-height: 100vh;
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      #root {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* --- BOOTSTRAP OVERRIDES --- */
+      .card {
+        background: var(--glass-surface);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid var(--glass-border);
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      
+      .card:hover {
+        border-color: rgba(0, 243, 255, 0.3);
+        box-shadow: 0 0 25px rgba(0, 243, 255, 0.05);
+      }
+
+      .btn-primary {
+        background-color: var(--primary-neon);
+        border-color: var(--primary-neon);
+        color: #000;
+        font-weight: 700;
+      }
+      .btn-primary:hover {
+        background-color: #00cce6;
+        border-color: #00cce6;
+        box-shadow: 0 0 15px rgba(0, 243, 255, 0.4);
+      }
+
+      .btn-outline-light {
+        border-color: rgba(255,255,255,0.2);
+        color: #94a3b8;
+      }
+      .btn-outline-light:hover {
+        background-color: rgba(255,255,255,0.1);
+        color: #fff;
+        border-color: #fff;
+      }
+
+      .form-control, .form-select {
+        background-color: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+      }
+      .form-control:focus, .form-select:focus {
+        background-color: rgba(0, 0, 0, 0.5);
+        border-color: var(--primary-neon);
+        box-shadow: 0 0 0 0.25rem rgba(0, 243, 255, 0.1);
+        color: #fff;
+      }
+
+      /* --- CINEMATIC BACKGROUND --- */
+      .cinematic-bg-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -999;
+        background: #000;
+      }
+      .bg-slide {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-size: cover;
+        background-position: center;
+        opacity: 0;
+        transition: opacity 2s ease-in-out;
+      }
+      .bg-slide.active {
+        opacity: 1;
+        animation: kenBurns 25s infinite alternate;
+      }
+      @keyframes kenBurns {
+        0% { transform: scale(1); }
+        100% { transform: scale(1.15); }
+      }
+      .bg-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: -998;
+        background: linear-gradient(to bottom, rgba(2,4,10,0.8), rgba(2,4,10,0.95));
+      }
+
+      /* --- UTILS --- */
+      .text-neon { color: var(--primary-neon); }
+      .text-purple { color: var(--secondary-neon); }
+      
+      .modern-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        border: 1px solid transparent;
+      }
+      .chip-glow-green { background: rgba(0, 255, 157, 0.1); color: #00ff9d; border-color: rgba(0, 255, 157, 0.3); }
+      .chip-glow-red { background: rgba(255, 0, 85, 0.1); color: #ff0055; border-color: rgba(255, 0, 85, 0.3); }
+      .chip-glow-blue { background: rgba(0, 243, 255, 0.1); color: #00f3ff; border-color: rgba(0, 243, 255, 0.3); }
+
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #02040a; }
+      ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--primary-neon); }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "firebase/": "https://esm.sh/firebase@^12.8.0/",
+    "module": "https://esm.sh/module@^2.0.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="./index.tsx"></script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
