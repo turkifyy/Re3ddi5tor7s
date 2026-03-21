@@ -27,7 +27,7 @@ export const SettingsManager: React.FC<SettingsProps> = ({ onLogout }) => {
           setFbProjectId(c.projectId);
           setFbApiKey(c.apiKey);
       }
-      setYtKey(localStorage.getItem('redditops_yt_key') || '');
+      setYtKey(localStorage.getItem('redditops_yt_key_v2') || 'AIzaSyDceYHk7rvvhlcsMSM_c7DhoTIED5O2rq4');
   }, []);
 
   const handleSaveFb = async () => {
@@ -67,7 +67,7 @@ export const SettingsManager: React.FC<SettingsProps> = ({ onLogout }) => {
           addToast('error', 'Invalid Google API Key (Must start with AIza...)');
           return;
       }
-      localStorage.setItem('redditops_yt_key', cleanKey);
+      localStorage.setItem('redditops_yt_key_v2', cleanKey);
       setYtKey(cleanKey); // Update UI
       addToast('success', 'YouTube Key Saved');
   };
