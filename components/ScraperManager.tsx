@@ -583,8 +583,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                             {/* --- YOUTUBE SPECIFIC CONTROLS --- */}
                             {scrapeMode === 'YOUTUBE' && (
                                 <>
-                                    <div className="mb-4 p-3 border border-info border-opacity-25 rounded bg-info bg-opacity-10 position-relative overflow-hidden">
-                                        <div className="position-absolute top-0 start-0 w-100 h-100 bg-info opacity-10" style={{ pointerEvents: 'none' }}></div>
+                                    <div className="mb-4 p-3 border border-info border-opacity-25 rounded bg-info bg-opacity-10 position-relative">
                                         <label className="form-label text-info fw-bold d-flex align-items-center">
                                             <Target size={16} className="me-2"/> Precision Mode (Target Specific Video)
                                         </label>
@@ -594,7 +593,6 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                             placeholder="Paste full YouTube URL or Video ID..." 
                                             value={customVideoId} 
                                             onChange={e => setCustomVideoId(e.target.value)} 
-                                            style={{ position: 'relative', zIndex: 1 }}
                                         />
                                         <div className="form-text text-info opacity-75 mb-3">Overrides trend search. Extracts leads from a specific video.</div>
                                         
