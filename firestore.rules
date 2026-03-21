@@ -1,0 +1,87 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------
+    // Helper Functions (دوال مساعدة للتحقق)
+    // ---------------------------------------------------------
+
+    // التحقق من أن المستخدم مسجل دخول
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // التحقق من أن المستخدم هو صاحب المستند
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // التحقق من أن البيانات المرسلة صحيحة (Validation)
+    function isValidUser() {
+      return request.resource.data.email is string &&
+             request.resource.data.role in ['ADMIN', 'USER'];
+    }
+
+    // التحقق من أن المستخدم لديه صلاحية "ADMIN"
+    // نقرأ مستند المستخدم الحالي ونفحص حقل الدور
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+    }
+
+    // ---------------------------------------------------------
+    // Collection Rules (قواعد المجموعات)
+    // ---------------------------------------------------------
+
+    // 1. Users Collection (ملفات المستخدمين)
+    // - القراءة: المالك يقرأ ملفه، الأدمن يقرأ الجميع.
+    // - الإنشاء: مسموح لأي شخص مسجل (عند التسجيل لأول مرة).
+    // - التعديل: الأدمن فقط (لمنع المستخدم من ترقية نفسه إلى أدمن).
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isSignedIn() && isValidUser();
+      allow update, delete: if isAdmin();
+    }
+
+    // 2. Admin Secrets (مخزن مفاتيح Reddit)
+    // - حماية قصوى: القراءة والكتابة للمسؤولين فقط.
+    match /admin_secrets/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 3. Operational Data (البيانات التشغيلية)
+    // - الحسابات، الحملات، النتائج، المحتوى المولد.
+    // - مسموح لأي مستخدم مسجل في النظام بالتعامل معها.
+    match /accounts/{docId} {
+      allow read, write: if isSignedIn();
+    }
+    
+    match /campaigns/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /scraped_leads/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /generated_content/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 4. System Metrics & Logs (السجلات والإحصائيات)
+    // - مسموح للمستخدمين بتحديث الإحصائيات (مثل counter increments).
+    match /metrics/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 5. System Probe (فحص الاتصال)
+    // - هذه المجموعة تُستخدم في `services/firebase.ts` للتأكد من الاتصال.
+    // - يجب أن تكون مفتوحة للقراءة للسماح بفحص الشبكة قبل تسجيل الدخول.
+    match /system_probe/{docId} {
+      allow read: if true;
+      allow write: if false; 
+    }
+  }
+}

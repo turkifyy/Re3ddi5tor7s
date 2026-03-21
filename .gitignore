@@ -26,3 +26,7 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# AI Prompt History
+prompt_*.json
+migrated_prompt_history/

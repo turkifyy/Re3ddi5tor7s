@@ -89,13 +89,13 @@ export const YouTubeService = {
     },
 
     // NEW: Search for videos by keyword and date with SORT ORDER support
-    async searchVideos(query: string, publishedAfter?: string, maxResults: number = 5, order: 'date' | 'viewCount' | 'relevance' = 'date'): Promise<{videoId: string, title: string}[]> {
+    async searchVideos(query: string, publishedAfter?: string, maxResults: number = 5, order: 'date' | 'viewCount' | 'relevance' = 'date', regionCode: string = 'US'): Promise<{videoId: string, title: string}[]> {
         const apiKey = this.getApiKey();
         if (!apiKey) throw new Error("YouTube API Key is missing.");
 
         try {
             // order=viewCount gets the "Trending/Viral" videos for the query
-            let url = `${YOUTUBE_API_BASE}/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${apiKey}&order=${order}`;
+            let url = `${YOUTUBE_API_BASE}/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${apiKey}&order=${order}&regionCode=${regionCode}`;
             
             if (publishedAfter) {
                 url += `&publishedAfter=${publishedAfter}`;
@@ -121,34 +121,34 @@ export const YouTubeService = {
         }
     },
 
-    async fetchVideoComments(videoId: string, maxResults: number = 100): Promise<any[]> {
+    // Updated to support pagination
+    async fetchVideoCommentsPage(videoId: string, maxResults: number = 100, pageToken?: string, existingVideoTitle?: string): Promise<{comments: any[], nextPageToken?: string}> {
         const apiKey = this.getApiKey();
         if (!apiKey) throw new Error("YouTube API Key is missing. Please add it in Settings.");
 
         try {
-            // 1. Fetch video details for context (Title)
-            // We wrap this in its own try/catch so a title failure doesn't block comment scraping (unless it's Quota)
-            let videoTitle = "Unknown Video";
-            try {
-                const videoRes = await fetchWithRobustness(`${YOUTUBE_API_BASE}/videos?part=snippet&id=${videoId}&key=${apiKey}`);
-                if (!videoRes.ok) {
-                    // Check if it's a fatal error (Quota) before ignoring
-                    const tempJson = await videoRes.clone().json().catch(() => ({}));
-                    const tempMsg = tempJson.error?.message || "";
-                    if (tempMsg.includes('quota')) await this._handleError(videoRes, 'VideoMetadata');
-                    
-                    logger.warn('YOUTUBE', `Could not fetch video title (Status ${videoRes.status}). Proceeding with ID.`);
-                } else {
-                    const videoData = await videoRes.json();
-                    videoTitle = videoData.items?.[0]?.snippet?.title || "Unknown Video";
+            // 1. Fetch video details for context (Title) - only if we don't have a pageToken to save quota
+            let videoTitle = existingVideoTitle || "Unknown Video";
+            if (!pageToken && !existingVideoTitle) {
+                try {
+                    const videoRes = await fetchWithRobustness(`${YOUTUBE_API_BASE}/videos?part=snippet&id=${videoId}&key=${apiKey}`);
+                    if (!videoRes.ok) {
+                        const tempJson = await videoRes.clone().json().catch(() => ({}));
+                        const tempMsg = tempJson.error?.message || "";
+                        if (tempMsg.includes('quota')) await this._handleError(videoRes, 'VideoMetadata');
+                        logger.warn('YOUTUBE', `Could not fetch video title (Status ${videoRes.status}). Proceeding with ID.`);
+                    } else {
+                        const videoData = await videoRes.json();
+                        videoTitle = videoData.items?.[0]?.snippet?.title || "Unknown Video";
+                    }
+                } catch (e: any) {
+                    if (e.message.includes('QUOTA')) throw e; 
                 }
-            } catch (e: any) {
-                if (e.message.includes('QUOTA')) throw e; // Re-throw fatal quota errors
             }
 
             // 2. Fetch Comments
-            // textFormat=plainText strips most HTML but we use textOriginal for raw data
-            const url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet&videoId=${videoId}&key=${apiKey}&maxResults=${Math.min(maxResults, 100)}&textFormat=plainText&order=relevance`; // Changed order to relevance to get top comments
+            let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet&videoId=${videoId}&key=${apiKey}&maxResults=${Math.min(maxResults, 100)}&textFormat=plainText&order=relevance`;
+            if (pageToken) url += `&pageToken=${pageToken}`;
             
             const response = await fetchWithRobustness(url);
             
@@ -158,14 +158,13 @@ export const YouTubeService = {
 
             const data = await response.json();
             
-            if (!data.items) return [];
+            if (!data.items) return { comments: [] };
 
-            return data.items.map((item: any) => {
+            const comments = data.items.map((item: any) => {
                 const comment = item.snippet.topLevelComment.snippet;
                 return {
                     id: item.id,
                     author: comment.authorDisplayName,
-                    // Use textOriginal to avoid HTML entities
                     content: comment.textOriginal || comment.textDisplay,
                     likes: comment.likeCount,
                     publishedAt: comment.publishedAt,
@@ -174,12 +173,43 @@ export const YouTubeService = {
                 };
             });
 
+            return { comments, nextPageToken: data.nextPageToken };
+
         } catch (error: any) {
-            // Final safety catch to ensure no HTML leaks
             let msg = error.message;
             if (msg.includes('<')) msg = msg.replace(/<[^>]*>?/gm, '');
             throw new Error(msg);
         }
+    },
+
+    // Backwards compatible method that fetches up to maxResults comments
+    async fetchVideoComments(videoId: string, maxResults: number = 100): Promise<any[]> {
+        let allComments: any[] = [];
+        let pageToken: string | undefined = undefined;
+        let videoTitle: string | undefined = undefined;
+
+        while (allComments.length < maxResults) {
+            const fetchLimit = Math.min(maxResults - allComments.length, 100);
+            const res = await this.fetchVideoCommentsPage(videoId, fetchLimit, pageToken, videoTitle);
+            
+            if (res.comments.length === 0) {
+                break; // No more comments
+            }
+
+            allComments = allComments.concat(res.comments);
+            
+            // Save video title to avoid fetching it again
+            if (!videoTitle && res.comments.length > 0) {
+                videoTitle = res.comments[0].videoTitle;
+            }
+
+            pageToken = res.nextPageToken;
+            if (!pageToken) {
+                break; // No more pages
+            }
+        }
+
+        return allComments.slice(0, maxResults);
     },
 
     async postReply(commentId: string, text: string): Promise<boolean> {

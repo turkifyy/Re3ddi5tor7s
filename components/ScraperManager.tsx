@@ -40,9 +40,11 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     // Config State
     const [selectedCategory, setSelectedCategory] = useState<MarketingCategory>('MOVIES');
     const [customSubreddits, setCustomSubreddits] = useState('');
+    const [customVideoId, setCustomVideoId] = useState('');
     const [timeframe, setTimeframe] = useState<SearchTimeframe>('24h');
     const [keywords, setKeywords] = useState('');
     const [limitPreset, setLimitPreset] = useState<number>(10);
+    const [targetRegion, setTargetRegion] = useState<string>('US');
     
     // Runtime
     const [isRunning, setIsRunning] = useState(false);
@@ -81,6 +83,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
         setSelectedCategory('MOVIES');
         // UX FIX: Clear custom input when switching modes to prevent confusion
         setCustomSubreddits('');
+        setCustomVideoId('');
 
         if (scrapeMode === 'YOUTUBE') {
             setHasYtKey(!!YouTubeService.getApiKey());
@@ -155,60 +158,66 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                 // Determine Targets (Smart Trend Discovery)
                 let videoTargets: {id: string, title: string}[] = [];
                 
-                // DISCOVERY MODE: Fetch Trending Videos
-                const rawSearchTerms = selectedCategory === 'CUSTOM' ? 
-                     customSubreddits.split(',') : // Use the custom input as search queries
-                     CATEGORY_MAP[selectedCategory];
+                if (customVideoId.trim()) {
+                    const videoId = customVideoId.trim();
+                    addLog(`Direct Video Target: ${videoId}`, 'INFO');
+                    videoTargets = [{ id: videoId, title: `Target Video (${videoId})` }];
+                } else {
+                    // DISCOVERY MODE: Fetch Trending Videos
+                    const rawSearchTerms = selectedCategory === 'CUSTOM' ? 
+                         customSubreddits.split(',') : // Use the custom input as search queries
+                         CATEGORY_MAP[selectedCategory];
 
-                if(!rawSearchTerms || rawSearchTerms.length === 0) {
-                    addToast('error', 'No search terms defined for category.'); setIsRunning(false); return;
-                }
-                
-                // Clean inputs
-                const allSearchTerms = rawSearchTerms
-                    .map(t => t.trim())
-                    .filter(t => t.length > 0);
-
-                // MAINTENANCE UPDATE: Randomize terms to ensure broad coverage across multiple runs
-                // This prevents scanning the exact same "top 5" terms every single time.
-                const shuffledTerms = [...allSearchTerms].sort(() => 0.5 - Math.random());
-                const searchTerms = shuffledTerms.slice(0, 5);
-
-                const publishedAfter = getYouTubePublishedAfter(timeframe);
-                addLog(`Trend Radar Active: Scanning ${searchTerms.length} random niches from category...`, 'INFO');
-                
-                for (const term of searchTerms) {
-                    if (abortRef.current) break;
-
-                    addLog(`Analyzing Trends for: "${term}"...`, 'INFO');
-                    // KEY CHANGE: Sort by 'viewCount' to detect TRENDS, not just recent videos
-                    const found = await YouTubeService.searchVideos(term, publishedAfter, 5, 'viewCount');
-                    
-                    if (found.length > 0) {
-                        addLog(`Detected ${found.length} viral videos for "${term}".`, 'SUCCESS');
-                        videoTargets = [...videoTargets, ...found.map(v => ({id: v.videoId, title: v.title}))];
+                    if(!rawSearchTerms || rawSearchTerms.length === 0) {
+                        addToast('error', 'No search terms defined for category.'); setIsRunning(false); return;
                     }
                     
-                    // Tiny delay between search calls
-                    await new Promise(r => setTimeout(r, 200));
+                    // Clean inputs
+                    const allSearchTerms = rawSearchTerms
+                        .map(t => t.trim())
+                        .filter(t => t.length > 0);
+
+                    // MAINTENANCE UPDATE: Randomize terms to ensure broad coverage across multiple runs
+                    // This prevents scanning the exact same "top 5" terms every single time.
+                    const shuffledTerms = [...allSearchTerms].sort(() => 0.5 - Math.random());
+                    const searchTerms = shuffledTerms.slice(0, 5);
+
+                    const publishedAfter = getYouTubePublishedAfter(timeframe);
+                    addLog(`Trend Radar Active: Scanning ${searchTerms.length} random niches from category...`, 'INFO');
+                    
+                    for (const term of searchTerms) {
+                        if (abortRef.current) break;
+
+                        addLog(`Analyzing Trends for: "${term}" in region ${targetRegion}...`, 'INFO');
+                        // KEY CHANGE: Sort by 'viewCount' to detect TRENDS, not just recent videos
+                        const found = await YouTubeService.searchVideos(term, publishedAfter, 5, 'viewCount', targetRegion);
+                        
+                        if (found.length > 0) {
+                            addLog(`Detected ${found.length} viral videos for "${term}".`, 'SUCCESS');
+                            videoTargets = [...videoTargets, ...found.map(v => ({id: v.videoId, title: v.title}))];
+                        }
+                        
+                        // Tiny delay between search calls
+                        await new Promise(r => setTimeout(r, 200));
+                    }
+
+                    if (videoTargets.length === 0) {
+                        addToast('info', 'No trending videos found matching criteria.');
+                        setIsRunning(false);
+                        return;
+                    }
+
+                    // Remove duplicates
+                    videoTargets = videoTargets.filter((v, i, self) => i === self.findIndex((t) => t.id === v.id));
+
+                    // SAFETY CAP: Limit to 20 videos max to prevent quota exhaustion on Comment Threads
+                    if (videoTargets.length > 20) {
+                        addLog(`Queue Optimization: Limiting to top 20/${videoTargets.length} viral videos to protect API Quota.`, 'WARN');
+                        videoTargets = videoTargets.slice(0, 20);
+                    }
+
+                    addLog(`Total Trend Queue: ${videoTargets.length} viral videos.`, 'INFO');
                 }
-
-                if (videoTargets.length === 0) {
-                    addToast('info', 'No trending videos found matching criteria.');
-                    setIsRunning(false);
-                    return;
-                }
-
-                // Remove duplicates
-                videoTargets = videoTargets.filter((v, i, self) => i === self.findIndex((t) => t.id === v.id));
-
-                // SAFETY CAP: Limit to 20 videos max to prevent quota exhaustion on Comment Threads
-                if (videoTargets.length > 20) {
-                    addLog(`Queue Optimization: Limiting to top 20/${videoTargets.length} viral videos to protect API Quota.`, 'WARN');
-                    videoTargets = videoTargets.slice(0, 20);
-                }
-
-                addLog(`Total Trend Queue: ${videoTargets.length} viral videos.`, 'INFO');
 
                 // Process Loop
                 let matchesFound = 0;
@@ -546,47 +555,81 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                             {/* --- YOUTUBE SPECIFIC CONTROLS --- */}
                             {scrapeMode === 'YOUTUBE' && (
                                 <>
-                                    <div className="p-3 mb-3 bg-danger bg-opacity-10 rounded border border-danger border-opacity-25 text-center">
-                                        <Flame size={20} className="text-danger mb-2"/>
-                                        <div className="text-white fw-bold small text-uppercase">Smart Trend Detection</div>
-                                        <div className="text-muted small" style={{fontSize: '0.75rem'}}>Automatically finds viral videos in selected niche (Randomized).</div>
-                                    </div>
-
                                     <div className="mb-3">
-                                        <label className="form-label text-muted"><Globe size={14} className="me-1"/> Content Category</label>
-                                        <select className="form-select border-danger" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value as any)}>
-                                            <option value="MOVIES">Movies & Cinema</option>
-                                            <option value="SERIES">TV Series & Shows</option>
-                                            <option value="MATCHES">Football & Sports</option>
-                                            <option value="RECIPES">Food & Recipes</option>
-                                            <option value="APPS_MOD">Apps Mod (APK)</option>
-                                            <option value="GAMES_MOD">Games Mod (APK)</option>
-                                            <option value="EARN_MONEY">Earn Money / Online Work</option>
-                                            <option value="ECOMMERCE">E-Commerce & Products</option>
-                                            <option value="COURSE">Courses & Education</option>
-                                            <option value="SERVICE">Services & Freelancing</option>
-                                            <option value="DATING">Dating & Relationships</option>
-                                            <option value="MUSIC">Download Music</option>
-                                            <option value="CUSTOM">Custom Search Topics</option>
-                                        </select>
+                                        <label className="form-label text-muted">Specific Video ID (Optional)</label>
+                                        <input 
+                                            type="text" 
+                                            className="form-control" 
+                                            placeholder="e.g. dQw4w9WgXcQ" 
+                                            value={customVideoId} 
+                                            onChange={e => setCustomVideoId(e.target.value)} 
+                                        />
+                                        <div className="form-text text-secondary">If provided, bypasses trend discovery and scrapes this video directly.</div>
                                     </div>
 
-                                    {selectedCategory === 'CUSTOM' && (
-                                        <div className="mb-3">
-                                            <label className="form-label text-muted">Search Topics (comma separated)</label>
-                                            <input type="text" className="form-control" placeholder="e.g. AI news, funny cats" value={customSubreddits} onChange={e => setCustomSubreddits(e.target.value)} />
-                                        </div>
+                                    {!customVideoId && (
+                                        <>
+                                            <div className="p-3 mb-3 bg-danger bg-opacity-10 rounded border border-danger border-opacity-25 text-center">
+                                                <Flame size={20} className="text-danger mb-2"/>
+                                                <div className="text-white fw-bold small text-uppercase">Smart Trend Detection</div>
+                                                <div className="text-muted small" style={{fontSize: '0.75rem'}}>Automatically finds viral videos in selected niche (Randomized).</div>
+                                            </div>
+
+                                            <div className="mb-3">
+                                                <label className="form-label text-muted"><Globe size={14} className="me-1"/> Target Region (High CPM)</label>
+                                                <select className="form-select" value={targetRegion} onChange={e => setTargetRegion(e.target.value)}>
+                                                    <option value="US">United States (US)</option>
+                                                    <option value="GB">United Kingdom (GB)</option>
+                                                    <option value="CA">Canada (CA)</option>
+                                                    <option value="AU">Australia (AU)</option>
+                                                    <option value="AE">United Arab Emirates (AE)</option>
+                                                    <option value="SA">Saudi Arabia (SA)</option>
+                                                    <option value="QA">Qatar (QA)</option>
+                                                    <option value="KW">Kuwait (KW)</option>
+                                                    <option value="DE">Germany (DE)</option>
+                                                    <option value="FR">France (FR)</option>
+                                                    <option value="IN">India (IN) - Low CPM</option>
+                                                </select>
+                                                <div className="form-text text-secondary">Select the geographic region to target for high CPM leads.</div>
+                                            </div>
+
+                                            <div className="mb-3">
+                                                <label className="form-label text-muted"><Globe size={14} className="me-1"/> Content Category</label>
+                                                <select className="form-select border-danger" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value as any)}>
+                                                    <option value="MOVIES">Movies & Cinema</option>
+                                                    <option value="SERIES">TV Series & Shows</option>
+                                                    <option value="MATCHES">Football & Sports</option>
+                                                    <option value="RECIPES">Food & Recipes</option>
+                                                    <option value="APPS_MOD">Apps Mod (APK)</option>
+                                                    <option value="GAMES_MOD">Games Mod (APK)</option>
+                                                    <option value="EARN_MONEY">Earn Money / Online Work</option>
+                                                    <option value="ECOMMERCE">E-Commerce & Products</option>
+                                                    <option value="COURSE">Courses & Education</option>
+                                                    <option value="SERVICE">Services & Freelancing</option>
+                                                    <option value="DATING">Dating & Relationships</option>
+                                                    <option value="MUSIC">Download Music</option>
+                                                    <option value="CUSTOM">Custom Search Topics</option>
+                                                </select>
+                                            </div>
+
+                                            {selectedCategory === 'CUSTOM' && (
+                                                <div className="mb-3">
+                                                    <label className="form-label text-muted">Search Topics (comma separated)</label>
+                                                    <input type="text" className="form-control" placeholder="e.g. AI news, funny cats" value={customSubreddits} onChange={e => setCustomSubreddits(e.target.value)} />
+                                                </div>
+                                            )}
+
+                                            <div className="mb-3">
+                                                <label className="form-label text-muted"><CalendarClock size={14} className="me-1"/> Viral Since</label>
+                                                <select className="form-select" value={timeframe} onChange={e => setTimeframe(e.target.value as any)}>
+                                                    <option value="24h">Last 24 Hours</option>
+                                                    <option value="48h">Past 2 Days</option>
+                                                    <option value="72h">Past 3 Days</option>
+                                                    <option value="week">Past Week</option>
+                                                </select>
+                                            </div>
+                                        </>
                                     )}
-
-                                    <div className="mb-3">
-                                        <label className="form-label text-muted"><CalendarClock size={14} className="me-1"/> Viral Since</label>
-                                        <select className="form-select" value={timeframe} onChange={e => setTimeframe(e.target.value as any)}>
-                                            <option value="24h">Last 24 Hours</option>
-                                            <option value="48h">Past 2 Days</option>
-                                            <option value="72h">Past 3 Days</option>
-                                            <option value="week">Past Week</option>
-                                        </select>
-                                    </div>
 
                                     {!hasYtKey ? (
                                         <div className="alert alert-danger bg-danger bg-opacity-10 border-danger border-opacity-25 d-flex align-items-center mt-2 p-2 small text-danger">
