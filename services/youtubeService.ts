@@ -49,9 +49,9 @@ export const YouTubeService = {
 
     getApiKey(): string {
         try {
-            return (localStorage.getItem('redditops_yt_key_v2') || 'AIzaSyDceYHk7rvvhlcsMSM_c7DhoTIED5O2rq4').trim();
+            return (localStorage.getItem('redditops_yt_key_v2') || 'AIzaSyBTH-AHkj31i50CPB13qkyrIHKXYHxL5vA').trim();
         } catch(e) {
-            return 'AIzaSyDceYHk7rvvhlcsMSM_c7DhoTIED5O2rq4';
+            return 'AIzaSyBTH-AHkj31i50CPB13qkyrIHKXYHxL5vA';
         }
     },
 

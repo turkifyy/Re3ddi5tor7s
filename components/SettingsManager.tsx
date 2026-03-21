@@ -27,7 +27,7 @@ export const SettingsManager: React.FC<SettingsProps> = ({ onLogout }) => {
           setFbProjectId(c.projectId);
           setFbApiKey(c.apiKey);
       }
-      setYtKey(localStorage.getItem('redditops_yt_key_v2') || 'AIzaSyDceYHk7rvvhlcsMSM_c7DhoTIED5O2rq4');
+      setYtKey(localStorage.getItem('redditops_yt_key_v2') || 'AIzaSyBTH-AHkj31i50CPB13qkyrIHKXYHxL5vA');
   }, []);
 
   const handleSaveFb = async () => {
