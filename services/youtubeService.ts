@@ -89,16 +89,22 @@ export const YouTubeService = {
     },
 
     // NEW: Search for videos by keyword and date with SORT ORDER support
-    async searchVideos(query: string, publishedAfter?: string, maxResults: number = 5, order: 'date' | 'viewCount' | 'relevance' = 'date', regionCode: string = 'US'): Promise<{videoId: string, title: string}[]> {
+    async searchVideos(query: string, publishedAfter?: string, maxResults: number = 5, order: 'date' | 'viewCount' | 'relevance' = 'date', regionCode: string = 'US', relevanceLanguage?: string): Promise<{videoId: string, title: string}[]> {
         const apiKey = this.getApiKey();
         if (!apiKey) throw new Error("YouTube API Key is missing.");
 
         try {
             // order=viewCount gets the "Trending/Viral" videos for the query
-            let url = `${YOUTUBE_API_BASE}/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${apiKey}&order=${order}&regionCode=${regionCode}`;
+            // Exclude common low CPM keywords if not explicitly searching for them
+            const optimizedQuery = query.toLowerCase().includes('india') ? query : `${query} -hindi -india`;
+            
+            let url = `${YOUTUBE_API_BASE}/search?part=snippet&type=video&q=${encodeURIComponent(optimizedQuery)}&maxResults=${maxResults}&key=${apiKey}&order=${order}&regionCode=${regionCode}`;
             
             if (publishedAfter) {
                 url += `&publishedAfter=${publishedAfter}`;
+            }
+            if (relevanceLanguage) {
+                url += `&relevanceLanguage=${relevanceLanguage}`;
             }
 
             const response = await fetchWithRobustness(url);
@@ -189,8 +195,10 @@ export const YouTubeService = {
         let videoTitle: string | undefined = undefined;
 
         while (allComments.length < maxResults) {
-            const fetchLimit = Math.min(maxResults - allComments.length, 100);
-            const res = await this.fetchVideoCommentsPage(videoId, fetchLimit, pageToken, videoTitle);
+            // ALWAYS request 100 (the maximum allowed) per page. 
+            // YouTube often filters out spam/deleted comments, returning fewer than requested.
+            // If we ask for exactly the remaining amount, we might get stuck in an infinite loop of tiny requests.
+            const res = await this.fetchVideoCommentsPage(videoId, 100, pageToken, videoTitle);
             
             if (res.comments.length === 0) {
                 break; // No more comments

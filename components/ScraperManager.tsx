@@ -45,6 +45,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     const [keywords, setKeywords] = useState('');
     const [limitPreset, setLimitPreset] = useState<number>(10);
     const [targetRegion, setTargetRegion] = useState<string>('US');
+    const [targetLanguage, setTargetLanguage] = useState<string>('en');
     
     // Runtime
     const [isRunning, setIsRunning] = useState(false);
@@ -188,9 +189,9 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                     for (const term of searchTerms) {
                         if (abortRef.current) break;
 
-                        addLog(`Analyzing Trends for: "${term}" in region ${targetRegion}...`, 'INFO');
+                        addLog(`Analyzing Trends for: "${term}" in region ${targetRegion} (Lang: ${targetLanguage})...`, 'INFO');
                         // KEY CHANGE: Sort by 'viewCount' to detect TRENDS, not just recent videos
-                        const found = await YouTubeService.searchVideos(term, publishedAfter, 5, 'viewCount', targetRegion);
+                        const found = await YouTubeService.searchVideos(term, publishedAfter, 5, 'viewCount', targetRegion, targetLanguage);
                         
                         if (found.length > 0) {
                             addLog(`Detected ${found.length} viral videos for "${term}".`, 'SUCCESS');
@@ -591,6 +592,18 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                                     <option value="IN">India (IN) - Low CPM</option>
                                                 </select>
                                                 <div className="form-text text-secondary">Select the geographic region to target for high CPM leads.</div>
+                                            </div>
+
+                                            <div className="mb-3">
+                                                <label className="form-label text-muted"><Globe size={14} className="me-1"/> Target Language</label>
+                                                <select className="form-select" value={targetLanguage} onChange={e => setTargetLanguage(e.target.value)}>
+                                                    <option value="en">English (EN)</option>
+                                                    <option value="ar">Arabic (AR)</option>
+                                                    <option value="fr">French (FR)</option>
+                                                    <option value="de">German (DE)</option>
+                                                    <option value="es">Spanish (ES)</option>
+                                                </select>
+                                                <div className="form-text text-secondary">Forces YouTube to return content in this language (Prevents unwanted Indian/Hindi content).</div>
                                             </div>
 
                                             <div className="mb-3">
