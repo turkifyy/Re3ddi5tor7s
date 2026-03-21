@@ -245,5 +245,95 @@ Requirements:
        logger.error('AI', `Sentiment Analysis Failed: ${(error as Error).message}`);
        return { score: 0, label: 'Error' }; 
     }
+  },
+
+  async analyzeLeadIntent(comment: string, context: string): Promise<{ isLead: boolean, score: number, intent: string, reason: string }> {
+    logger.info('AI', `Precision Mode: Analyzing Lead Intent...`);
+
+    if (!dynamicApiKey || dynamicApiKey.includes("YOUR_")) {
+        const errorMsg = "CRITICAL: DeepSeek API Key missing.";
+        logger.error('AI', errorMsg);
+        throw new Error(errorMsg);
+    }
+
+    try {
+      return await measure(async () => {
+          const response = await fetchWithRobustness(`${BASE_URL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${dynamicApiKey}`
+            },
+            body: JSON.stringify({
+              model: "deepseek-chat",
+              messages: [
+                {
+                  role: "system",
+                  content: `You are an elite lead generation analyst. Analyze the provided comment to determine if the user is a potential customer for the product/service described in the Context.
+                  
+CRITERIA FOR A GOOD LEAD:
+- They express a pain point the product solves.
+- They are asking for recommendations related to the product.
+- They show buying intent or frustration with a competitor.
+
+Return ONLY a valid JSON object with no markdown formatting. Schema:
+{
+  "isLead": boolean, // true if they are a strong potential customer
+  "score": number, // 0 to 100 based on buying intent urgency
+  "intent": string, // 3-5 words summarizing what they want/need
+  "reason": string // 1 short sentence explaining why they are or aren't a lead
+}`
+                },
+                {
+                  role: "user",
+                  content: `Context (What we are selling): "${context}"\n\nComment to analyze: "${comment}"`
+                }
+              ],
+              temperature: 0.1,
+              response_format: { type: "json_object" }
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`API Error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          const content = data.choices[0]?.message?.content;
+          
+          let result;
+          try {
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                result = JSON.parse(jsonMatch[0]);
+            } else {
+                const cleanJson = content.replace(/```json\n?|```/g, '').trim();
+                result = JSON.parse(cleanJson);
+            }
+          } catch (e) {
+             logger.error('AI', 'Failed to parse JSON response for Lead Intent.');
+             throw new Error("JSON Parsing Failed");
+          }
+          
+          await DatabaseService.incrementAiOps();
+          
+          if (result.isLead) {
+              logger.success('AI', `High-Intent Lead Verified! Score: ${result.score}`);
+          } else {
+              logger.warn('AI', `Lead Rejected by AI. Reason: ${result.reason}`);
+          }
+          
+          return {
+              isLead: !!result.isLead,
+              score: typeof result.score === 'number' ? result.score : 0,
+              intent: result.intent || 'Unknown',
+              reason: result.reason || 'No reason provided'
+          };
+      });
+
+    } catch (error) {
+       logger.error('AI', `Lead Intent Analysis Failed: ${(error as Error).message}`);
+       return { isLead: false, score: 0, intent: 'Error', reason: 'Analysis failed' }; 
+    }
   }
 };

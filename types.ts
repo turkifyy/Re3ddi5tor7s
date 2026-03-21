@@ -83,6 +83,10 @@ export interface ScrapedLead {
     scrapedAt: string;
     status: 'NEW' | 'ENGAGED' | 'DISMISSED';
     score: number; // Reddit Score or YouTube Likes
+    // NEW: AI Precision Mode Metadata
+    aiScore?: number; // 0-100
+    aiIntent?: string; // Short summary of user intent
+    aiReasoning?: string; // Why it's a good/bad lead
 }
 
 export interface SystemLog {

@@ -2,10 +2,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from './Button';
 import { useToast } from './ToastProvider';
-import { Search, StopCircle, Zap, Target, Filter, ExternalLink, ArrowRight, Eye, X, Terminal, AlertTriangle, Youtube, ArrowUp, ArrowDown, Database, Settings, Check, ListFilter, CalendarClock, Globe, Flame } from 'lucide-react';
+import { Search, StopCircle, Zap, Target, Filter, ExternalLink, ArrowRight, Eye, X, Terminal, AlertTriangle, Youtube, ArrowUp, ArrowDown, Database, Settings, Check, ListFilter, CalendarClock, Globe, Flame, Bot, MessageSquare, User, ThumbsUp } from 'lucide-react';
 import { MarketingCategory, SearchTimeframe, ScrapedLead, ViewState } from '../types';
 import { RedditService } from '../services/redditService';
 import { YouTubeService } from '../services/youtubeService';
+import { deepseekService } from '../services/deepseekService';
 import { DatabaseService } from '../services/databaseService';
 import { logger } from '../services/logger';
 
@@ -48,6 +49,8 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     const [targetLanguage, setTargetLanguage] = useState<string>('en');
     const [includeReplies, setIncludeReplies] = useState<boolean>(false);
     const [minCommentLikes, setMinCommentLikes] = useState<number>(0);
+    const [useAiVerification, setUseAiVerification] = useState<boolean>(false);
+    const [aiContext, setAiContext] = useState<string>('We are looking for people who need a video editing software that is easy to use and fast.');
     
     // Runtime
     const [isRunning, setIsRunning] = useState(false);
@@ -265,6 +268,25 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                             const match = keywordList.find(k => matchKeyword(searchableContent, k));
         
                             if (match) {
+                                let aiData = null;
+
+                                // SMART FILTER: AI Intent Verification
+                                if (useAiVerification && customVideoId.trim()) {
+                                    addLog(`[AI] Verifying lead intent for: ${comment.author}...`, 'INFO');
+                                    const analysis = await deepseekService.analyzeLeadIntent(comment.content, aiContext);
+                                    
+                                    if (!analysis.isLead) {
+                                        addLog(`[AI] Rejected lead from ${comment.author}. Reason: ${analysis.reason}`, 'WARN');
+                                        continue; // Skip this lead, AI says it's not good
+                                    }
+
+                                    aiData = {
+                                        score: analysis.score,
+                                        intent: analysis.intent,
+                                        reason: analysis.reason
+                                    };
+                                }
+
                                 const typeLabel = comment.isReply ? 'REPLY' : 'COMMENT';
                                 addLog(`LEAD FOUND: "${match}" in ${typeLabel} by ${comment.author} (${comment.likes} likes)`, 'SUCCESS');
                                 
@@ -283,7 +305,12 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                     permalink: `/watch?v=${target.id}&lc=${comment.id}`,
                                     scrapedAt: new Date().toISOString(),
                                     status: 'NEW',
-                                    score: comment.likes
+                                    score: comment.likes,
+                                    ...(aiData && {
+                                        aiScore: aiData.score,
+                                        aiIntent: aiData.intent,
+                                        aiReasoning: aiData.reason
+                                    })
                                 };
         
                                 if (!results.find(l => l.id === newLead.id)) {
@@ -508,6 +535,21 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                             <div className="text-muted small mb-3">
                                 Author: {previewItem.author} • Score/Likes: {previewItem.score}
                             </div>
+                            
+                            {previewItem.aiScore !== undefined && (
+                                <div className="mb-4 p-3 bg-dark rounded border border-info border-opacity-25">
+                                    <div className="d-flex align-items-center mb-2">
+                                        <Bot size={16} className="text-info me-2"/>
+                                        <span className="fw-bold text-white me-2">AI Analysis</span>
+                                        <span className={`badge ${previewItem.aiScore >= 80 ? 'bg-success' : previewItem.aiScore >= 50 ? 'bg-warning text-dark' : 'bg-danger'}`}>
+                                            Score: {previewItem.aiScore}/100
+                                        </span>
+                                    </div>
+                                    <div className="text-info mb-1 fw-bold" style={{fontSize: '0.85rem'}}>Intent: {previewItem.aiIntent}</div>
+                                    <div className="text-muted fst-italic" style={{fontSize: '0.85rem'}}>{previewItem.aiReasoning}</div>
+                                </div>
+                            )}
+
                             <div className="d-grid gap-2 d-md-flex justify-content-md-end">
                                 <a href={previewItem.type === 'COMMENT' ? `https://youtube.com${previewItem.permalink}` : `https://reddit.com${previewItem.permalink}`} target="_blank" className="btn btn-outline-light btn-sm">
                                     <ExternalLink size={16} className="me-2"/> Open Source
@@ -583,22 +625,23 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                             {/* --- YOUTUBE SPECIFIC CONTROLS --- */}
                             {scrapeMode === 'YOUTUBE' && (
                                 <>
-                                    <div className="mb-4 p-3 border border-info border-opacity-25 rounded bg-info bg-opacity-10 position-relative">
+                                    <div className="mb-4 p-3 border border-info border-opacity-50 rounded bg-dark position-relative shadow-sm">
                                         <label className="form-label text-info fw-bold d-flex align-items-center">
                                             <Target size={16} className="me-2"/> Precision Mode (Target Specific Video)
                                         </label>
                                         <input 
                                             type="text" 
-                                            className="form-control border-info bg-dark text-white shadow-none" 
+                                            className="form-control border-info bg-black text-white shadow-none" 
                                             placeholder="Paste full YouTube URL or Video ID..." 
                                             value={customVideoId} 
                                             onChange={e => setCustomVideoId(e.target.value)} 
+                                            autoComplete="off"
                                         />
                                         <div className="form-text text-info opacity-75 mb-3">Overrides trend search. Extracts leads from a specific video.</div>
                                         
                                         {/* Advanced Precision Controls - Only show if ID is entered */}
                                         <div className={`collapse ${customVideoId ? 'show' : ''}`}>
-                                            <div className="p-3 bg-black bg-opacity-50 rounded border border-info border-opacity-25">
+                                            <div className="p-3 bg-black rounded border border-info border-opacity-25 mt-2">
                                                 <div className="form-check form-switch mb-3">
                                                     <input className="form-check-input bg-info border-info" type="checkbox" id="includeReplies" checked={includeReplies} onChange={e => setIncludeReplies(e.target.checked)} />
                                                     <label className="form-check-label text-white small fw-bold" htmlFor="includeReplies">Deep Scrape (Analyze Comment Replies)</label>
@@ -611,6 +654,31 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                                     </div>
                                                     <input type="number" className="form-control form-control-sm bg-dark text-white border-secondary text-center" value={minCommentLikes} onChange={e => setMinCommentLikes(parseInt(e.target.value) || 0)} min="0" style={{ width: '70px' }} />
                                                 </div>
+                                                
+                                                <hr className="border-secondary my-3" />
+                                                
+                                                <div className="form-check form-switch mb-2">
+                                                    <input className="form-check-input bg-primary border-primary" type="checkbox" id="useAiVerification" checked={useAiVerification} onChange={e => setUseAiVerification(e.target.checked)} />
+                                                    <label className="form-check-label text-white small fw-bold d-flex align-items-center" htmlFor="useAiVerification">
+                                                        <Bot size={14} className="me-1 text-primary"/> AI Intent Verification (DeepSeek)
+                                                    </label>
+                                                    <div className="text-muted" style={{fontSize: '0.7rem'}}>Uses AI to analyze matched comments and reject false positives based on buying intent.</div>
+                                                </div>
+                                                
+                                                {useAiVerification && (
+                                                    <div className="mt-2 p-2 bg-dark rounded border border-primary border-opacity-25">
+                                                        <label className="text-primary small fw-bold mb-1">Product/Service Context (What are you selling?)</label>
+                                                        <textarea 
+                                                            className="form-control form-control-sm bg-black text-white border-secondary" 
+                                                            rows={2}
+                                                            placeholder="e.g. We sell a SaaS tool for managing Twitter accounts..."
+                                                            value={aiContext}
+                                                            onChange={e => setAiContext(e.target.value)}
+                                                            style={{ fontSize: '0.8rem' }}
+                                                        />
+                                                        <div className="text-muted mt-1" style={{fontSize: '0.65rem'}}>The AI uses this context to determine if the commenter is a genuine lead.</div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -848,7 +916,20 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                                         <span className="text-warning small font-monospace">{lead.matchedKeyword}</span>
                                                     </div>
                                                     <h6 className="mb-1 text-truncate" style={{maxWidth: '450px'}}>{lead.content}</h6>
-                                                    <small className="text-muted">by {lead.author} • {lead.score} likes/score</small>
+                                                    <small className="text-muted d-block mb-2">by {lead.author} • {lead.score} likes/score</small>
+                                                    
+                                                    {lead.aiScore !== undefined && (
+                                                        <div className="mt-2 p-2 bg-black bg-opacity-50 rounded border border-info border-opacity-25" style={{fontSize: '0.8rem'}}>
+                                                            <div className="d-flex align-items-center mb-1">
+                                                                <Bot size={12} className="text-info me-1"/>
+                                                                <span className="text-info fw-bold me-2">AI Intent: {lead.aiIntent}</span>
+                                                                <span className={`badge ${lead.aiScore >= 80 ? 'bg-success' : lead.aiScore >= 50 ? 'bg-warning text-dark' : 'bg-danger'}`} style={{fontSize: '0.65rem'}}>
+                                                                    {lead.aiScore}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-muted fst-italic text-truncate" style={{maxWidth: '400px'}} title={lead.aiReasoning}>{lead.aiReasoning}</div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="d-flex gap-2">
                                                     <button className="btn btn-sm btn-outline-info" onClick={() => setPreviewItem(lead)} title="Quick View">
