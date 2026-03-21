@@ -46,6 +46,8 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     const [limitPreset, setLimitPreset] = useState<number>(10);
     const [targetRegion, setTargetRegion] = useState<string>('US');
     const [targetLanguage, setTargetLanguage] = useState<string>('en');
+    const [includeReplies, setIncludeReplies] = useState<boolean>(false);
+    const [minCommentLikes, setMinCommentLikes] = useState<number>(0);
     
     // Runtime
     const [isRunning, setIsRunning] = useState(false);
@@ -85,6 +87,8 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
         // UX FIX: Clear custom input when switching modes to prevent confusion
         setCustomSubreddits('');
         setCustomVideoId('');
+        setIncludeReplies(false);
+        setMinCommentLikes(0);
 
         if (scrapeMode === 'YOUTUBE') {
             setHasYtKey(!!YouTubeService.getApiKey());
@@ -160,9 +164,25 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                 let videoTargets: {id: string, title: string}[] = [];
                 
                 if (customVideoId.trim()) {
-                    const videoId = customVideoId.trim();
-                    addLog(`Direct Video Target: ${videoId}`, 'INFO');
-                    videoTargets = [{ id: videoId, title: `Target Video (${videoId})` }];
+                    // SMART EXTRACTION: Handle full URLs or raw IDs
+                    const rawInput = customVideoId.trim();
+                    const extractedId = YouTubeService.extractVideoId(rawInput) || rawInput;
+                    
+                    addLog(`[PRECISION MODE] Initializing deep scan for target: ${extractedId}`, 'INFO');
+                    
+                    try {
+                        // Fetch rich metadata for validation and context
+                        const videoData = await YouTubeService.fetchVideoDetails(extractedId);
+                        const title = videoData.snippet.title;
+                        const channel = videoData.snippet.channelTitle;
+                        const views = parseInt(videoData.statistics.viewCount).toLocaleString();
+                        
+                        addLog(`Target Locked: "${title}" by ${channel} (${views} views)`, 'SUCCESS');
+                        videoTargets = [{ id: extractedId, title: title }];
+                    } catch (e: any) {
+                        addLog(`Video Validation Warning: ${e.message}. Proceeding with raw ID.`, 'WARN');
+                        videoTargets = [{ id: extractedId, title: `Target Video (${extractedId})` }];
+                    }
                 } else {
                     // DISCOVERY MODE: Fetch Trending Videos
                     const rawSearchTerms = selectedCategory === 'CUSTOM' ? 
@@ -232,14 +252,21 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                      setProgress(Math.round(((i) / videoTargets.length) * 100));
 
                      try {
-                        const comments = await YouTubeService.fetchVideoComments(target.id, limitPreset);
+                        // SMART FETCH: Pass includeReplies parameter
+                        const comments = await YouTubeService.fetchVideoComments(target.id, limitPreset, includeReplies);
                         
                         for (const comment of comments) {
+                            // SMART FILTER: Minimum Likes
+                            if (minCommentLikes > 0 && (comment.likes || 0) < minCommentLikes) {
+                                continue; // Skip low-value comments
+                            }
+
                             const searchableContent = `${comment.content} ${comment.author}`;
                             const match = keywordList.find(k => matchKeyword(searchableContent, k));
         
                             if (match) {
-                                addLog(`LEAD FOUND: "${match}" in: ${target.title.substring(0, 20)}...`, 'SUCCESS');
+                                const typeLabel = comment.isReply ? 'REPLY' : 'COMMENT';
+                                addLog(`LEAD FOUND: "${match}" in ${typeLabel} by ${comment.author} (${comment.likes} likes)`, 'SUCCESS');
                                 
                                 const maxTitleLen = 60; 
                                 const titleClean = comment.videoTitle.length > maxTitleLen 
@@ -249,7 +276,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                 const newLead: ScrapedLead = {
                                     id: comment.id,
                                     type: 'COMMENT',
-                                    subreddit: `YouTube: ${titleClean}`,
+                                    subreddit: `YouTube: ${titleClean} [${typeLabel}]`,
                                     author: comment.author,
                                     content: comment.content,
                                     matchedKeyword: match,
@@ -556,16 +583,38 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                             {/* --- YOUTUBE SPECIFIC CONTROLS --- */}
                             {scrapeMode === 'YOUTUBE' && (
                                 <>
-                                    <div className="mb-3">
-                                        <label className="form-label text-muted">Specific Video ID (Optional)</label>
+                                    <div className="mb-4 p-3 border border-info border-opacity-25 rounded bg-info bg-opacity-10 position-relative overflow-hidden">
+                                        <div className="position-absolute top-0 start-0 w-100 h-100 bg-info opacity-10" style={{ pointerEvents: 'none' }}></div>
+                                        <label className="form-label text-info fw-bold d-flex align-items-center">
+                                            <Target size={16} className="me-2"/> Precision Mode (Target Specific Video)
+                                        </label>
                                         <input 
                                             type="text" 
-                                            className="form-control" 
-                                            placeholder="e.g. dQw4w9WgXcQ" 
+                                            className="form-control border-info bg-dark text-white shadow-none" 
+                                            placeholder="Paste full YouTube URL or Video ID..." 
                                             value={customVideoId} 
                                             onChange={e => setCustomVideoId(e.target.value)} 
+                                            style={{ position: 'relative', zIndex: 1 }}
                                         />
-                                        <div className="form-text text-secondary">If provided, bypasses trend discovery and scrapes this video directly.</div>
+                                        <div className="form-text text-info opacity-75 mb-3">Overrides trend search. Extracts leads from a specific video.</div>
+                                        
+                                        {/* Advanced Precision Controls - Only show if ID is entered */}
+                                        <div className={`collapse ${customVideoId ? 'show' : ''}`}>
+                                            <div className="p-3 bg-black bg-opacity-50 rounded border border-info border-opacity-25">
+                                                <div className="form-check form-switch mb-3">
+                                                    <input className="form-check-input bg-info border-info" type="checkbox" id="includeReplies" checked={includeReplies} onChange={e => setIncludeReplies(e.target.checked)} />
+                                                    <label className="form-check-label text-white small fw-bold" htmlFor="includeReplies">Deep Scrape (Analyze Comment Replies)</label>
+                                                    <div className="text-muted" style={{fontSize: '0.7rem'}}>Fetches nested replies. Slower, but finds hidden leads.</div>
+                                                </div>
+                                                <div className="d-flex align-items-center justify-content-between">
+                                                    <div>
+                                                        <label className="text-white small fw-bold mb-0">Quality Filter (Min. Likes)</label>
+                                                        <div className="text-muted" style={{fontSize: '0.7rem'}}>Ignore spam/bot comments with 0 likes.</div>
+                                                    </div>
+                                                    <input type="number" className="form-control form-control-sm bg-dark text-white border-secondary text-center" value={minCommentLikes} onChange={e => setMinCommentLikes(parseInt(e.target.value) || 0)} min="0" style={{ width: '70px' }} />
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {!customVideoId && (

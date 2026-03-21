@@ -127,8 +127,31 @@ export const YouTubeService = {
         }
     },
 
-    // Updated to support pagination
-    async fetchVideoCommentsPage(videoId: string, maxResults: number = 100, pageToken?: string, existingVideoTitle?: string): Promise<{comments: any[], nextPageToken?: string}> {
+    // NEW: Fetch full video details for context and UI
+    async fetchVideoDetails(videoId: string): Promise<any> {
+        const apiKey = this.getApiKey();
+        if (!apiKey) throw new Error("YouTube API Key is missing.");
+
+        try {
+            const url = `${YOUTUBE_API_BASE}/videos?part=snippet,statistics&id=${videoId}&key=${apiKey}`;
+            const response = await fetchWithRobustness(url);
+            if (!response.ok) {
+                await this._handleError(response, 'VideoDetails');
+            }
+            const data = await response.json();
+            if (!data.items || data.items.length === 0) {
+                throw new Error("Video not found.");
+            }
+            return data.items[0];
+        } catch (error: any) {
+            let msg = error.message;
+            if (msg.includes('<')) msg = msg.replace(/<[^>]*>?/gm, '');
+            throw new Error(msg);
+        }
+    },
+
+    // Updated to support pagination and optional reply fetching
+    async fetchVideoCommentsPage(videoId: string, maxResults: number = 100, pageToken?: string, existingVideoTitle?: string, fetchReplies: boolean = false): Promise<{comments: any[], nextPageToken?: string}> {
         const apiKey = this.getApiKey();
         if (!apiKey) throw new Error("YouTube API Key is missing. Please add it in Settings.");
 
@@ -153,7 +176,7 @@ export const YouTubeService = {
             }
 
             // 2. Fetch Comments
-            let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet&videoId=${videoId}&key=${apiKey}&maxResults=${Math.min(maxResults, 100)}&textFormat=plainText&order=relevance`;
+            let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet${fetchReplies ? ',replies' : ''}&videoId=${videoId}&key=${apiKey}&maxResults=${Math.min(maxResults, 100)}&textFormat=plainText&order=relevance`;
             if (pageToken) url += `&pageToken=${pageToken}`;
             
             const response = await fetchWithRobustness(url);
@@ -166,17 +189,38 @@ export const YouTubeService = {
             
             if (!data.items) return { comments: [] };
 
-            const comments = data.items.map((item: any) => {
+            const comments: any[] = [];
+            
+            data.items.forEach((item: any) => {
                 const comment = item.snippet.topLevelComment.snippet;
-                return {
+                comments.push({
                     id: item.id,
                     author: comment.authorDisplayName,
                     content: comment.textOriginal || comment.textDisplay,
                     likes: comment.likeCount,
                     publishedAt: comment.publishedAt,
                     videoTitle: videoTitle,
-                    videoId: videoId
-                };
+                    videoId: videoId,
+                    isReply: false
+                });
+
+                // Extract replies if requested and available
+                if (fetchReplies && item.replies && item.replies.comments) {
+                    item.replies.comments.forEach((replyItem: any) => {
+                        const reply = replyItem.snippet;
+                        comments.push({
+                            id: replyItem.id,
+                            author: reply.authorDisplayName,
+                            content: reply.textOriginal || reply.textDisplay,
+                            likes: reply.likeCount,
+                            publishedAt: reply.publishedAt,
+                            videoTitle: videoTitle,
+                            videoId: videoId,
+                            isReply: true,
+                            parentId: item.id
+                        });
+                    });
+                }
             });
 
             return { comments, nextPageToken: data.nextPageToken };
@@ -189,7 +233,7 @@ export const YouTubeService = {
     },
 
     // Backwards compatible method that fetches up to maxResults comments
-    async fetchVideoComments(videoId: string, maxResults: number = 100): Promise<any[]> {
+    async fetchVideoComments(videoId: string, maxResults: number = 100, fetchReplies: boolean = false): Promise<any[]> {
         let allComments: any[] = [];
         let pageToken: string | undefined = undefined;
         let videoTitle: string | undefined = undefined;
@@ -198,7 +242,7 @@ export const YouTubeService = {
             // ALWAYS request 100 (the maximum allowed) per page. 
             // YouTube often filters out spam/deleted comments, returning fewer than requested.
             // If we ask for exactly the remaining amount, we might get stuck in an infinite loop of tiny requests.
-            const res = await this.fetchVideoCommentsPage(videoId, 100, pageToken, videoTitle);
+            const res = await this.fetchVideoCommentsPage(videoId, 100, pageToken, videoTitle, fetchReplies);
             
             if (res.comments.length === 0) {
                 break; // No more comments
