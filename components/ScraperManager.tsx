@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from './Button';
 import { useToast } from './ToastProvider';
-import { Search, StopCircle, Zap, Target, Filter, ExternalLink, ArrowRight, Eye, X, Terminal, AlertTriangle, Youtube, ArrowUp, ArrowDown, Database, Settings, Check, ListFilter, CalendarClock, Globe, Flame, Bot, MessageSquare, User, ThumbsUp } from 'lucide-react';
+import { Search, StopCircle, Zap, Target, Filter, ExternalLink, ArrowRight, Eye, X, Terminal, AlertTriangle, Youtube, ArrowUp, ArrowDown, Database, Settings, Check, ListFilter, CalendarClock, Globe, Flame, Bot, MessageSquare, User, ThumbsUp, Sparkles } from 'lucide-react';
 import { MarketingCategory, SearchTimeframe, ScrapedLead, ViewState } from '../types';
 import { RedditService } from '../services/redditService';
 import { YouTubeService } from '../services/youtubeService';
@@ -30,6 +30,66 @@ const CATEGORY_MAP: Record<string, string[]> = {
     MUSIC: ['music video', 'new song', 'remix', 'lofi hip hop', 'download music', 'copyright free music', 'mp3 download']
 };
 
+// SMART INTENT PRESETS
+const SMART_INTENT_PRESETS: Record<string, { keywords: string, aiContext: string }> = {
+    MOVIES: {
+        keywords: "where.*watch\nfull movie\nlink\ndownload\nwatch.*free\nsite\nwebsite",
+        aiContext: "We offer a free streaming platform. Identify users who have NOT watched the movie yet and are actively asking for a link, website, or source to watch or download it full and free. Reject users who are just reviewing or discussing the plot because they already watched it."
+    },
+    SERIES: {
+        keywords: "where.*watch\nfull episode\nlink\ndownload\nwatch.*free\nsite\nwebsite\nseason",
+        aiContext: "We offer a free streaming platform. Identify users who have NOT watched the show/episode yet and are actively asking for a link, website, or source to watch or download it full and free. Reject users who are just reviewing or discussing the plot."
+    },
+    MATCHES: {
+        keywords: "live\nstream\nwhere.*watch\nchannel\nbroadcast\nlink\nmatch\ngame",
+        aiContext: "We offer free live sports streaming. Identify users asking for a link, channel, or website to watch the match live. Reject users just discussing the score or players."
+    },
+    RECIPES: {
+        keywords: "recipe\ningredients\nhow to make\ninstructions\nstep by step\nfull video",
+        aiContext: "We offer a full recipe and cooking guide platform. Identify users asking for the full recipe, ingredients list, or step-by-step instructions. Reject users just saying the food looks good."
+    },
+    GAMES: {
+        keywords: "where.*buy\ndownload\nlink\nplay.*free\nget.*game",
+        aiContext: "We offer game keys and downloads. Identify users asking where to get the game, asking for a download link, or asking how to play it for free. Reject users discussing gameplay or lore."
+    },
+    APPS: {
+        keywords: "download\nlink\nwhere.*get\napp store\nplay store\napk",
+        aiContext: "We offer app downloads and reviews. Identify users asking for the app name, download link, or where to get it. Reject users who already have the app and are asking for tech support."
+    },
+    APPS_MOD: {
+        keywords: "apk\nmod\nhack\npremium\nunlocked\ndownload\nlink\nandroid\nios",
+        aiContext: "We offer modded premium APKs. Identify users asking how to get the premium version for free, looking for a mod, hack, or download link. Reject users just complaining about the app."
+    },
+    GAMES_MOD: {
+        keywords: "apk\nmod\nhack\nunlimited\nmoney\ndownload\nlink\nandroid\nios\ncheat",
+        aiContext: "We offer modded games with unlimited resources. Identify users asking for a mod, hack, cheat, or download link to get unlimited money/gems. Reject users just discussing gameplay."
+    },
+    EARN_MONEY: {
+        keywords: "how.*earn\nmake money\njob\nwork\nhire\npay\ntutorial\nguide\nstart",
+        aiContext: "We offer online earning methods and jobs. Identify users asking how to make money, looking for work, or asking for a tutorial/guide to start earning. Reject users promoting their own scams."
+    },
+    ECOMMERCE: {
+        keywords: "where.*buy\nlink\nprice\nhow much\nstore\nshop\namazon\nbuy",
+        aiContext: "We sell the product shown in the video. Identify users asking where to buy it, asking for the price, or asking for a store link. Reject users who already bought it or are just saying it looks cool."
+    },
+    COURSE: {
+        keywords: "course\nlearn\ntutorial\nfull\nwhere\nlink\nstart\nbeginner",
+        aiContext: "We offer full educational courses. Identify users asking for a full course, tutorial, or asking where they can learn this skill from scratch. Reject users who are already experts."
+    },
+    SERVICE: {
+        keywords: "hire\nneed\nhelp\nlooking for\nservice\nfreelancer\nprice\ncost",
+        aiContext: "We offer professional freelancing services. Identify users saying they need help, are looking to hire someone, or asking for the cost of a service. Reject users offering their own services."
+    },
+    DATING: {
+        keywords: "app\nsite\nwhere\nfind\nmeet\nlink\ndownload",
+        aiContext: "We offer a dating app/platform. Identify users asking for the best app, site, or place to meet people, or asking for a download link. Reject users just telling personal stories."
+    },
+    MUSIC: {
+        keywords: "song name\ndownload\nmp3\nspotify\naudio\ntrack\nlink\nmusic",
+        aiContext: "We offer free music downloads. Identify users asking for the song name, audio track, or a link to download the music. Reject users just saying 'good song'."
+    }
+};
+
 interface ScraperManagerProps {
     onNavigate?: (view: ViewState) => void;
 }
@@ -51,6 +111,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     const [minCommentLikes, setMinCommentLikes] = useState<number>(0);
     const [useAiVerification, setUseAiVerification] = useState<boolean>(false);
     const [aiContext, setAiContext] = useState<string>('We are looking for people who need a video editing software that is easy to use and fast.');
+    const [smartIntentMode, setSmartIntentMode] = useState<boolean>(false);
     
     // Runtime
     const [isRunning, setIsRunning] = useState(false);
@@ -72,6 +133,28 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     
     const abortRef = useRef(false);
     const { addToast } = useToast();
+    
+    // Handle Smart Intent Mode Toggle
+    const handleSmartIntentToggle = (enabled: boolean, category: string) => {
+        setSmartIntentMode(enabled);
+        if (enabled && SMART_INTENT_PRESETS[category]) {
+            const preset = SMART_INTENT_PRESETS[category];
+            setKeywords(preset.keywords);
+            setUseAiVerification(true);
+            setAiContext(preset.aiContext);
+            addToast('success', `Smart Intent Mode activated for ${category}. AI Context and Keywords auto-filled!`);
+        }
+    };
+
+    // Handle Category Change
+    const handleCategoryChange = (newCategory: string) => {
+        setSelectedCategory(newCategory as any);
+        if (smartIntentMode && SMART_INTENT_PRESETS[newCategory]) {
+            const preset = SMART_INTENT_PRESETS[newCategory];
+            setKeywords(preset.keywords);
+            setAiContext(preset.aiContext);
+        }
+    };
 
     // Auto-scroll logs
     useEffect(() => {
@@ -92,6 +175,12 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
         setCustomVideoId('');
         setIncludeReplies(false);
         setMinCommentLikes(0);
+        
+        // Reset Smart Intent Mode to prevent mismatch between category and keywords
+        setSmartIntentMode(false);
+        setUseAiVerification(false);
+        setKeywords('');
+        setAiContext('We are looking for people who need a video editing software that is easy to use and fast.');
 
         if (scrapeMode === 'YOUTUBE') {
             setHasYtKey(!!YouTubeService.getApiKey());
@@ -271,7 +360,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                 let aiData = null;
 
                                 // SMART FILTER: AI Intent Verification
-                                if (useAiVerification && customVideoId.trim()) {
+                                if (useAiVerification) {
                                     addLog(`[AI] Verifying lead intent for: ${comment.author}...`, 'INFO');
                                     const analysis = await deepseekService.analyzeLeadIntent(comment.content, aiContext);
                                     
@@ -591,7 +680,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                 <>
                                     <div className="mb-3">
                                         <label className="form-label text-muted"><ListFilter size={14} className="me-1"/> Target Category</label>
-                                        <select className="form-select" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value as any)}>
+                                        <select className="form-select" value={selectedCategory} onChange={e => handleCategoryChange(e.target.value)}>
                                             <option value="MOVIES">Movies</option>
                                             <option value="SERIES">Series</option>
                                             <option value="GAMES">Games</option>
@@ -638,49 +727,6 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                             autoComplete="off"
                                         />
                                         <div className="form-text text-info opacity-75 mb-3">Overrides trend search. Extracts leads from a specific video.</div>
-                                        
-                                        {/* Advanced Precision Controls - Only show if ID is entered */}
-                                        <div className={`collapse ${customVideoId ? 'show' : ''}`}>
-                                            <div className="p-3 bg-black rounded border border-info border-opacity-25 mt-2">
-                                                <div className="form-check form-switch mb-3">
-                                                    <input className="form-check-input bg-info border-info" type="checkbox" id="includeReplies" checked={includeReplies} onChange={e => setIncludeReplies(e.target.checked)} />
-                                                    <label className="form-check-label text-white small fw-bold" htmlFor="includeReplies">Deep Scrape (Analyze Comment Replies)</label>
-                                                    <div className="text-muted" style={{fontSize: '0.7rem'}}>Fetches nested replies. Slower, but finds hidden leads.</div>
-                                                </div>
-                                                <div className="d-flex align-items-center justify-content-between">
-                                                    <div>
-                                                        <label className="text-white small fw-bold mb-0">Quality Filter (Min. Likes)</label>
-                                                        <div className="text-muted" style={{fontSize: '0.7rem'}}>Ignore spam/bot comments with 0 likes.</div>
-                                                    </div>
-                                                    <input type="number" className="form-control form-control-sm bg-dark text-white border-secondary text-center" value={minCommentLikes} onChange={e => setMinCommentLikes(parseInt(e.target.value) || 0)} min="0" style={{ width: '70px' }} />
-                                                </div>
-                                                
-                                                <hr className="border-secondary my-3" />
-                                                
-                                                <div className="form-check form-switch mb-2">
-                                                    <input className="form-check-input bg-primary border-primary" type="checkbox" id="useAiVerification" checked={useAiVerification} onChange={e => setUseAiVerification(e.target.checked)} />
-                                                    <label className="form-check-label text-white small fw-bold d-flex align-items-center" htmlFor="useAiVerification">
-                                                        <Bot size={14} className="me-1 text-primary"/> AI Intent Verification (DeepSeek)
-                                                    </label>
-                                                    <div className="text-muted" style={{fontSize: '0.7rem'}}>Uses AI to analyze matched comments and reject false positives based on buying intent.</div>
-                                                </div>
-                                                
-                                                {useAiVerification && (
-                                                    <div className="mt-2 p-2 bg-dark rounded border border-primary border-opacity-25">
-                                                        <label className="text-primary small fw-bold mb-1">Product/Service Context (What are you selling?)</label>
-                                                        <textarea 
-                                                            className="form-control form-control-sm bg-black text-white border-secondary" 
-                                                            rows={2}
-                                                            placeholder="e.g. We sell a SaaS tool for managing Twitter accounts..."
-                                                            value={aiContext}
-                                                            onChange={e => setAiContext(e.target.value)}
-                                                            style={{ fontSize: '0.8rem' }}
-                                                        />
-                                                        <div className="text-muted mt-1" style={{fontSize: '0.65rem'}}>The AI uses this context to determine if the commenter is a genuine lead.</div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
                                     </div>
 
                                     {!customVideoId && (
@@ -723,7 +769,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
 
                                             <div className="mb-3">
                                                 <label className="form-label text-muted"><Globe size={14} className="me-1"/> Content Category</label>
-                                                <select className="form-select border-danger" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value as any)}>
+                                                <select className="form-select border-danger" value={selectedCategory} onChange={e => handleCategoryChange(e.target.value)}>
                                                     <option value="MOVIES">Movies & Cinema</option>
                                                     <option value="SERIES">TV Series & Shows</option>
                                                     <option value="MATCHES">Football & Sports</option>
@@ -779,12 +825,88 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                             {/* COMMON CONTROLS */}
                             <hr className="border-secondary opacity-25" />
                             
+                            {/* Advanced Filters */}
+                            <div className="p-3 bg-black rounded border border-secondary border-opacity-25 mb-4">
+                                <div className="form-check form-switch mb-3">
+                                    <input className="form-check-input bg-info border-info" type="checkbox" id="includeReplies" checked={includeReplies} onChange={e => setIncludeReplies(e.target.checked)} />
+                                    <label className="form-check-label text-white small fw-bold" htmlFor="includeReplies">Deep Scrape (Analyze Comment Replies)</label>
+                                    <div className="text-muted" style={{fontSize: '0.7rem'}}>Fetches nested replies. Slower, but finds hidden leads.</div>
+                                </div>
+                                <div className="d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <label className="text-white small fw-bold mb-0">Quality Filter (Min. Likes)</label>
+                                        <div className="text-muted" style={{fontSize: '0.7rem'}}>Ignore spam/bot comments with 0 likes.</div>
+                                    </div>
+                                    <input type="number" className="form-control form-control-sm bg-dark text-white border-secondary text-center" value={minCommentLikes} onChange={e => setMinCommentLikes(parseInt(e.target.value) || 0)} min="0" style={{ width: '70px' }} />
+                                </div>
+                            </div>
+
+                            {/* SMART INTENT MODE TOGGLE */}
+                            <div className="mb-4 p-3 bg-primary bg-opacity-10 border border-primary border-opacity-50 rounded position-relative overflow-hidden">
+                                <div className="position-absolute top-0 end-0 p-2 opacity-25">
+                                    <Sparkles size={48} className="text-primary"/>
+                                </div>
+                                <div className="form-check form-switch mb-2 position-relative z-1">
+                                    <input 
+                                        className="form-check-input bg-primary border-primary" 
+                                        type="checkbox" 
+                                        id="smartIntentMode" 
+                                        checked={smartIntentMode} 
+                                        onChange={e => handleSmartIntentToggle(e.target.checked, selectedCategory)} 
+                                        disabled={selectedCategory === 'CUSTOM'}
+                                    />
+                                    <label className="form-check-label text-white fw-bold d-flex align-items-center" htmlFor="smartIntentMode">
+                                        <Bot size={16} className="me-2 text-primary"/> Smart Intent Mode (Auto-Pilot)
+                                    </label>
+                                </div>
+                                <div className="text-muted position-relative z-1" style={{fontSize: '0.75rem'}}>
+                                    Tired of writing keywords? Turn this on to automatically generate high-converting Regex keywords and configure the AI Context based on your selected category (e.g., finding people who want to watch the full movie, not just discussing it).
+                                </div>
+                                {selectedCategory === 'CUSTOM' && (
+                                    <div className="text-warning mt-2 small fw-bold">Select a specific category above to use Smart Intent Mode.</div>
+                                )}
+                            </div>
+                            
+                            <div className="p-3 bg-black rounded border border-primary border-opacity-25 mb-4">
+                                <div className="form-check form-switch mb-2">
+                                    <input className="form-check-input bg-primary border-primary" type="checkbox" id="useAiVerification" checked={useAiVerification} onChange={e => {
+                                        setUseAiVerification(e.target.checked);
+                                        if (smartIntentMode && !e.target.checked) setSmartIntentMode(false);
+                                    }} />
+                                    <label className="form-check-label text-white small fw-bold d-flex align-items-center" htmlFor="useAiVerification">
+                                        <Bot size={14} className="me-1 text-primary"/> AI Intent Verification (DeepSeek)
+                                    </label>
+                                    <div className="text-muted" style={{fontSize: '0.7rem'}}>Uses AI to analyze matched comments and reject false positives based on buying intent.</div>
+                                </div>
+                                
+                                {useAiVerification && (
+                                    <div className="mt-2 p-2 bg-dark rounded border border-primary border-opacity-25">
+                                        <label className="text-primary small fw-bold mb-1">Product/Service Context (What are you selling?)</label>
+                                        <textarea 
+                                            className="form-control form-control-sm bg-black text-white border-secondary" 
+                                            rows={2}
+                                            placeholder="e.g. We sell a SaaS tool for managing Twitter accounts..."
+                                            value={aiContext}
+                                            onChange={e => {
+                                                setAiContext(e.target.value);
+                                                if (smartIntentMode) setSmartIntentMode(false);
+                                            }}
+                                            style={{ fontSize: '0.8rem' }}
+                                        />
+                                        <div className="text-muted mt-1" style={{fontSize: '0.65rem'}}>The AI uses this context to determine if the commenter is a genuine lead.</div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="mb-3">
                                 <label className="form-label text-muted">Comment Keywords (Regex Supported)</label>
                                 <textarea 
                                     className="form-control font-monospace" 
                                     value={keywords} 
-                                    onChange={e => setKeywords(e.target.value)} 
+                                    onChange={e => {
+                                        setKeywords(e.target.value);
+                                        if (smartIntentMode) setSmartIntentMode(false); // Disable auto mode if user manually edits
+                                    }} 
                                     style={{minHeight: '100px'}}
                                     // UX FIX: Dynamic placeholder for better user guidance
                                     placeholder={scrapeMode === 'YOUTUBE' ? "Find within comments:\ne.g.\nbest link\nfunny\nfix" : "Enter one keyword per line\ne.g.\nbest app for\nhow to.*fix"}
