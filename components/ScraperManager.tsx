@@ -30,64 +30,19 @@ const CATEGORY_MAP: Record<string, string[]> = {
     MUSIC: ['music video', 'new song', 'remix', 'lofi hip hop', 'download music', 'copyright free music', 'mp3 download']
 };
 
-// SMART INTENT PRESETS
-const SMART_INTENT_PRESETS: Record<string, { keywords: string, aiContext: string }> = {
-    MOVIES: {
-        keywords: "where.*watch\nfull movie\nlink\ndownload\nwatch.*free\nsite\nwebsite",
-        aiContext: "We offer a free streaming platform. Identify users who have NOT watched the movie yet and are actively asking for a link, website, or source to watch or download it full and free. Reject users who are just reviewing or discussing the plot because they already watched it."
-    },
-    SERIES: {
-        keywords: "where.*watch\nfull episode\nlink\ndownload\nwatch.*free\nsite\nwebsite\nseason",
-        aiContext: "We offer a free streaming platform. Identify users who have NOT watched the show/episode yet and are actively asking for a link, website, or source to watch or download it full and free. Reject users who are just reviewing or discussing the plot."
-    },
-    MATCHES: {
-        keywords: "live\nstream\nwhere.*watch\nchannel\nbroadcast\nlink\nmatch\ngame",
-        aiContext: "We offer free live sports streaming. Identify users asking for a link, channel, or website to watch the match live. Reject users just discussing the score or players."
-    },
-    RECIPES: {
-        keywords: "recipe\ningredients\nhow to make\ninstructions\nstep by step\nfull video",
-        aiContext: "We offer a full recipe and cooking guide platform. Identify users asking for the full recipe, ingredients list, or step-by-step instructions. Reject users just saying the food looks good."
-    },
-    GAMES: {
-        keywords: "where.*buy\ndownload\nlink\nplay.*free\nget.*game",
-        aiContext: "We offer game keys and downloads. Identify users asking where to get the game, asking for a download link, or asking how to play it for free. Reject users discussing gameplay or lore."
-    },
-    APPS: {
-        keywords: "download\nlink\nwhere.*get\napp store\nplay store\napk",
-        aiContext: "We offer app downloads and reviews. Identify users asking for the app name, download link, or where to get it. Reject users who already have the app and are asking for tech support."
-    },
-    APPS_MOD: {
-        keywords: "apk\nmod\nhack\npremium\nunlocked\ndownload\nlink\nandroid\nios",
-        aiContext: "We offer modded premium APKs. Identify users asking how to get the premium version for free, looking for a mod, hack, or download link. Reject users just complaining about the app."
-    },
-    GAMES_MOD: {
-        keywords: "apk\nmod\nhack\nunlimited\nmoney\ndownload\nlink\nandroid\nios\ncheat",
-        aiContext: "We offer modded games with unlimited resources. Identify users asking for a mod, hack, cheat, or download link to get unlimited money/gems. Reject users just discussing gameplay."
-    },
-    EARN_MONEY: {
-        keywords: "how.*earn\nmake money\njob\nwork\nhire\npay\ntutorial\nguide\nstart",
-        aiContext: "We offer online earning methods and jobs. Identify users asking how to make money, looking for work, or asking for a tutorial/guide to start earning. Reject users promoting their own scams."
-    },
-    ECOMMERCE: {
-        keywords: "where.*buy\nlink\nprice\nhow much\nstore\nshop\namazon\nbuy",
-        aiContext: "We sell the product shown in the video. Identify users asking where to buy it, asking for the price, or asking for a store link. Reject users who already bought it or are just saying it looks cool."
-    },
-    COURSE: {
-        keywords: "course\nlearn\ntutorial\nfull\nwhere\nlink\nstart\nbeginner",
-        aiContext: "We offer full educational courses. Identify users asking for a full course, tutorial, or asking where they can learn this skill from scratch. Reject users who are already experts."
-    },
-    SERVICE: {
-        keywords: "hire\nneed\nhelp\nlooking for\nservice\nfreelancer\nprice\ncost",
-        aiContext: "We offer professional freelancing services. Identify users saying they need help, are looking to hire someone, or asking for the cost of a service. Reject users offering their own services."
-    },
-    DATING: {
-        keywords: "app\nsite\nwhere\nfind\nmeet\nlink\ndownload",
-        aiContext: "We offer a dating app/platform. Identify users asking for the best app, site, or place to meet people, or asking for a download link. Reject users just telling personal stories."
-    },
-    MUSIC: {
-        keywords: "song name\ndownload\nmp3\nspotify\naudio\ntrack\nlink\nmusic",
-        aiContext: "We offer free music downloads. Identify users asking for the song name, audio track, or a link to download the music. Reject users just saying 'good song'."
-    }
+// AI INTENT PROMPTS
+const AI_INTENT_PROMPTS: Record<string, string> = {
+    MOVIES: "We offer a free streaming platform. Identify users who have NOT watched the movie yet and are actively asking for a link, website, or source to watch or download it full and free. Reject users who are just reviewing or discussing the plot because they already watched it.",
+    SERIES: "We offer a free streaming platform. Identify users who have NOT watched the show/episode yet and are actively asking for a link, website, or source to watch or download it full and free. Reject users who are just reviewing or discussing the plot.",
+    SPORTS: "We offer free live sports streaming. Identify users asking for a link, channel, or website to watch the match live. Reject users just discussing the score or players.",
+    RECIPES: "We offer a full recipe and cooking guide platform. Identify users asking for the full recipe, ingredients list, or step-by-step instructions. Reject users just saying the food looks good.",
+    APPS_MOD: "We offer modded premium APKs. Identify users asking how to get the premium version for free, looking for a mod, hack, or download link. Reject users just complaining about the app.",
+    EARN_MONEY: "We offer online earning methods and jobs. Identify users asking how to make money, looking for work, or asking for a tutorial/guide to start earning. Reject users promoting their own scams.",
+    ECOMMERCE: "We sell the product shown in the video. Identify users asking where to buy it, asking for the price, or asking for a store link. Reject users who already bought it or are just saying it looks cool.",
+    COURSES: "We offer full educational courses. Identify users asking for a full course, tutorial, or asking where they can learn this skill from scratch. Reject users who are already experts.",
+    SERVICES: "We offer professional freelancing services. Identify users saying they need help, are looking to hire someone, or asking for the cost of a service. Reject users offering their own services.",
+    DATING: "We offer a dating app/platform. Identify users asking for the best app, site, or place to meet people, or asking for a download link. Reject users just telling personal stories.",
+    MUSIC: "We offer free music downloads. Identify users asking for the song name, audio track, or a link to download the music. Reject users just saying 'good song'."
 };
 
 interface ScraperManagerProps {
@@ -103,15 +58,12 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     const [customSubreddits, setCustomSubreddits] = useState('');
     const [customVideoId, setCustomVideoId] = useState('');
     const [timeframe, setTimeframe] = useState<SearchTimeframe>('24h');
-    const [keywords, setKeywords] = useState('');
     const [limitPreset, setLimitPreset] = useState<number>(10);
     const [targetRegion, setTargetRegion] = useState<string>('US');
     const [targetLanguage, setTargetLanguage] = useState<string>('en');
     const [includeReplies, setIncludeReplies] = useState<boolean>(false);
     const [minCommentLikes, setMinCommentLikes] = useState<number>(0);
-    const [useAiVerification, setUseAiVerification] = useState<boolean>(false);
-    const [aiContext, setAiContext] = useState<string>('We are looking for people who need a video editing software that is easy to use and fast.');
-    const [smartIntentMode, setSmartIntentMode] = useState<boolean>(false);
+    const [aiContext, setAiContext] = useState<string>(AI_INTENT_PROMPTS['MOVIES']);
     
     // Runtime
     const [isRunning, setIsRunning] = useState(false);
@@ -134,25 +86,11 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     const abortRef = useRef(false);
     const { addToast } = useToast();
     
-    // Handle Smart Intent Mode Toggle
-    const handleSmartIntentToggle = (enabled: boolean, category: string) => {
-        setSmartIntentMode(enabled);
-        if (enabled && SMART_INTENT_PRESETS[category]) {
-            const preset = SMART_INTENT_PRESETS[category];
-            setKeywords(preset.keywords);
-            setUseAiVerification(true);
-            setAiContext(preset.aiContext);
-            addToast('success', `Smart Intent Mode activated for ${category}. AI Context and Keywords auto-filled!`);
-        }
-    };
-
     // Handle Category Change
     const handleCategoryChange = (newCategory: string) => {
         setSelectedCategory(newCategory as any);
-        if (smartIntentMode && SMART_INTENT_PRESETS[newCategory]) {
-            const preset = SMART_INTENT_PRESETS[newCategory];
-            setKeywords(preset.keywords);
-            setAiContext(preset.aiContext);
+        if (AI_INTENT_PROMPTS[newCategory]) {
+            setAiContext(AI_INTENT_PROMPTS[newCategory]);
         }
     };
 
@@ -176,10 +114,6 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
         setIncludeReplies(false);
         setMinCommentLikes(0);
         
-        // Reset Smart Intent Mode to prevent mismatch between category and keywords
-        setSmartIntentMode(false);
-        setUseAiVerification(false);
-        setKeywords('');
         setAiContext('We are looking for people who need a video editing software that is easy to use and fast.');
 
         if (scrapeMode === 'YOUTUBE') {
@@ -200,17 +134,6 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
         });
     };
 
-    // SAFETY FIX: Safe Regex matching that doesn't crash on invalid/null input
-    const matchKeyword = (content: string | undefined | null, keyword: string): boolean => {
-        if (!content || !keyword) return false;
-        try {
-            // Escape characters if regex fails, fallback to simple include
-            return new RegExp(keyword, 'i').test(content);
-        } catch (e) {
-            return content.toLowerCase().includes(keyword.toLowerCase());
-        }
-    };
-
     // HELPER: Convert Timeframe to RFC 3339 for YouTube
     const getYouTubePublishedAfter = (tf: SearchTimeframe): string | undefined => {
         const now = new Date();
@@ -226,8 +149,6 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     };
 
     const handleRunSmartSearch = async () => {
-        if (!keywords) { addToast('error', 'Keywords required (Regex supported)'); return; }
-        
         // INPUT HARDENING: Ensure Custom Categories have actual text
         if (selectedCategory === 'CUSTOM' && !customSubreddits.trim()) {
             addToast('error', 'Please enter Search Topics for Custom category.');
@@ -334,7 +255,6 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
 
                 // Process Loop
                 let matchesFound = 0;
-                const keywordList = keywords.split(/[\n,]+/).map(k => k.trim()).filter(k => k);
 
                 for (let i = 0; i < videoTargets.length; i++) {
                      if (abortRef.current) break;
@@ -353,60 +273,49 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                 continue; // Skip low-value comments
                             }
 
-                            const searchableContent = `${comment.content} ${comment.author}`;
-                            const match = keywordList.find(k => matchKeyword(searchableContent, k));
-        
-                            if (match) {
-                                let aiData = null;
+                            // AI INTENT VERIFICATION
+                            addLog(`[AI] Analyzing intent for: ${comment.author}...`, 'INFO');
+                            const analysis = await deepseekService.analyzeLeadIntent(comment.content, aiContext);
+                            
+                            if (!analysis.isLead) {
+                                addLog(`[AI] Rejected lead from ${comment.author}. Reason: ${analysis.reason}`, 'WARN');
+                                continue; // Skip this lead, AI says it's not good
+                            }
 
-                                // SMART FILTER: AI Intent Verification
-                                if (useAiVerification) {
-                                    addLog(`[AI] Verifying lead intent for: ${comment.author}...`, 'INFO');
-                                    const analysis = await deepseekService.analyzeLeadIntent(comment.content, aiContext);
-                                    
-                                    if (!analysis.isLead) {
-                                        addLog(`[AI] Rejected lead from ${comment.author}. Reason: ${analysis.reason}`, 'WARN');
-                                        continue; // Skip this lead, AI says it's not good
-                                    }
+                            const aiData = {
+                                score: analysis.score,
+                                intent: analysis.intent,
+                                reason: analysis.reason
+                            };
 
-                                    aiData = {
-                                        score: analysis.score,
-                                        intent: analysis.intent,
-                                        reason: analysis.reason
-                                    };
-                                }
-
-                                const typeLabel = comment.isReply ? 'REPLY' : 'COMMENT';
-                                addLog(`LEAD FOUND: "${match}" in ${typeLabel} by ${comment.author} (${comment.likes} likes)`, 'SUCCESS');
-                                
-                                const maxTitleLen = 60; 
-                                const titleClean = comment.videoTitle.length > maxTitleLen 
-                                    ? `${comment.videoTitle.substring(0, maxTitleLen)}...` 
-                                    : comment.videoTitle;
-        
-                                const newLead: ScrapedLead = {
-                                    id: comment.id,
-                                    type: 'COMMENT',
-                                    subreddit: `YouTube: ${titleClean} [${typeLabel}]`,
-                                    author: comment.author,
-                                    content: comment.content,
-                                    matchedKeyword: match,
-                                    permalink: `/watch?v=${target.id}&lc=${comment.id}`,
-                                    scrapedAt: new Date().toISOString(),
-                                    status: 'NEW',
-                                    score: comment.likes,
-                                    ...(aiData && {
-                                        aiScore: aiData.score,
-                                        aiIntent: aiData.intent,
-                                        aiReasoning: aiData.reason
-                                    })
-                                };
-        
-                                if (!results.find(l => l.id === newLead.id)) {
-                                     await DatabaseService.addScrapedLead(newLead);
-                                     setResults(prev => [...prev, newLead]);
-                                     matchesFound++;
-                                }
+                            const typeLabel = comment.isReply ? 'REPLY' : 'COMMENT';
+                            addLog(`LEAD FOUND: AI matched intent in ${typeLabel} by ${comment.author} (${comment.likes} likes)`, 'SUCCESS');
+                            
+                            const maxTitleLen = 60; 
+                            const titleClean = comment.videoTitle.length > maxTitleLen 
+                                ? `${comment.videoTitle.substring(0, maxTitleLen)}...` 
+                                : comment.videoTitle;
+    
+                            const newLead: ScrapedLead = {
+                                id: comment.id,
+                                type: 'COMMENT',
+                                subreddit: `YouTube: ${titleClean} [${typeLabel}]`,
+                                author: comment.author,
+                                content: comment.content,
+                                matchedKeyword: 'AI Verified',
+                                permalink: `/watch?v=${target.id}&lc=${comment.id}`,
+                                scrapedAt: new Date().toISOString(),
+                                status: 'NEW',
+                                score: comment.likes,
+                                aiScore: aiData.score,
+                                aiIntent: aiData.intent,
+                                aiReasoning: aiData.reason
+                            };
+    
+                            if (!results.find(l => l.id === newLead.id)) {
+                                 await DatabaseService.addScrapedLead(newLead);
+                                 setResults(prev => [...prev, newLead]);
+                                 matchesFound++;
                             }
                         }
                      } catch (err: any) {
@@ -459,9 +368,6 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
             return;
         }
 
-        const keywordList = keywords.split(/[\n,]+/).map(k => k.trim()).filter(k => k);
-        addLog(`Loaded ${keywordList.length} keyword patterns.`, 'INFO');
-        
         const leadsFound: ScrapedLead[] = [];
         const apiTimeframe = timeframe === '24h' ? 'day' : timeframe;
 
@@ -494,33 +400,46 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                     
                     let subLeads = 0;
                     for (const post of posts) {
-                        // COMPREHENSIVE SEARCH: Check Title, Body, AND Author
-                        const fullContent = `${post.title} ${post.selftext || ''} ${post.author}`;
                         const displayContent = `${post.title} ${post.selftext || ''}`;
-                        const match = keywordList.find(k => matchKeyword(fullContent, k));
+                        
+                        // AI INTENT VERIFICATION
+                        addLog(`[AI] Analyzing intent for post by: ${post.author}...`, 'INFO');
+                        const analysis = await deepseekService.analyzeLeadIntent(displayContent, aiContext);
+                        
+                        if (!analysis.isLead) {
+                            addLog(`[AI] Rejected lead from ${post.author}. Reason: ${analysis.reason}`, 'WARN');
+                            continue; // Skip this lead, AI says it's not good
+                        }
 
-                        if (match) {
-                            addLog(`MATCH: "${match}" in ${post.id}`, 'SUCCESS');
-                            
-                            const newLead: ScrapedLead = {
-                                id: post.name,
-                                type: 'POST',
-                                subreddit: sub,
-                                author: post.author,
-                                content: displayContent, 
-                                matchedKeyword: match,
-                                permalink: post.permalink,
-                                scrapedAt: new Date().toISOString(),
-                                status: 'NEW',
-                                score: post.score
-                            };
+                        const aiData = {
+                            score: analysis.score,
+                            intent: analysis.intent,
+                            reason: analysis.reason
+                        };
 
-                            if (!leadsFound.find(l => l.id === newLead.id)) {
-                                await DatabaseService.addScrapedLead(newLead);
-                                leadsFound.push(newLead);
-                                setResults(prev => [...prev, newLead]);
-                                subLeads++;
-                            }
+                        addLog(`LEAD FOUND: AI matched intent in ${post.id}`, 'SUCCESS');
+                        
+                        const newLead: ScrapedLead = {
+                            id: post.name,
+                            type: 'POST',
+                            subreddit: sub,
+                            author: post.author,
+                            content: displayContent, 
+                            matchedKeyword: 'AI Verified',
+                            permalink: post.permalink,
+                            scrapedAt: new Date().toISOString(),
+                            status: 'NEW',
+                            score: post.score,
+                            aiScore: aiData.score,
+                            aiIntent: aiData.intent,
+                            aiReasoning: aiData.reason
+                        };
+
+                        if (!leadsFound.find(l => l.id === newLead.id)) {
+                            await DatabaseService.addScrapedLead(newLead);
+                            leadsFound.push(newLead);
+                            setResults(prev => [...prev, newLead]);
+                            subLeads++;
                         }
                     }
                     
@@ -553,7 +472,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                 if (leadsFound.length > 0) {
                     addToast('success', `Found & Saved ${leadsFound.length} new leads.`);
                 } else {
-                    addToast('info', 'No matches found with current keywords.');
+                    addToast('info', 'No matches found with current AI context.');
                 }
             } else {
                 setStatusMsg('Aborted by User.');
@@ -840,78 +759,25 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                     <input type="number" className="form-control form-control-sm bg-dark text-white border-secondary text-center" value={minCommentLikes} onChange={e => setMinCommentLikes(parseInt(e.target.value) || 0)} min="0" style={{ width: '70px' }} />
                                 </div>
                             </div>
-
-                            {/* SMART INTENT MODE TOGGLE */}
-                            <div className="mb-4 p-3 bg-primary bg-opacity-10 border border-primary border-opacity-50 rounded position-relative overflow-hidden">
-                                <div className="position-absolute top-0 end-0 p-2 opacity-25">
-                                    <Sparkles size={48} className="text-primary"/>
-                                </div>
-                                <div className="form-check form-switch mb-2 position-relative z-1">
-                                    <input 
-                                        className="form-check-input bg-primary border-primary" 
-                                        type="checkbox" 
-                                        id="smartIntentMode" 
-                                        checked={smartIntentMode} 
-                                        onChange={e => handleSmartIntentToggle(e.target.checked, selectedCategory)} 
-                                        disabled={selectedCategory === 'CUSTOM'}
-                                    />
-                                    <label className="form-check-label text-white fw-bold d-flex align-items-center" htmlFor="smartIntentMode">
-                                        <Bot size={16} className="me-2 text-primary"/> Smart Intent Mode (Auto-Pilot)
-                                    </label>
-                                </div>
-                                <div className="text-muted position-relative z-1" style={{fontSize: '0.75rem'}}>
-                                    Tired of writing keywords? Turn this on to automatically generate high-converting Regex keywords and configure the AI Context based on your selected category (e.g., finding people who want to watch the full movie, not just discussing it).
-                                </div>
-                                {selectedCategory === 'CUSTOM' && (
-                                    <div className="text-warning mt-2 small fw-bold">Select a specific category above to use Smart Intent Mode.</div>
-                                )}
-                            </div>
                             
                             <div className="p-3 bg-black rounded border border-primary border-opacity-25 mb-4">
-                                <div className="form-check form-switch mb-2">
-                                    <input className="form-check-input bg-primary border-primary" type="checkbox" id="useAiVerification" checked={useAiVerification} onChange={e => {
-                                        setUseAiVerification(e.target.checked);
-                                        if (smartIntentMode && !e.target.checked) setSmartIntentMode(false);
-                                    }} />
-                                    <label className="form-check-label text-white small fw-bold d-flex align-items-center" htmlFor="useAiVerification">
-                                        <Bot size={14} className="me-1 text-primary"/> AI Intent Verification (DeepSeek)
-                                    </label>
-                                    <div className="text-muted" style={{fontSize: '0.7rem'}}>Uses AI to analyze matched comments and reject false positives based on buying intent.</div>
-                                </div>
+                                <label className="form-check-label text-white small fw-bold d-flex align-items-center mb-2">
+                                    <Bot size={14} className="me-1 text-primary"/> AI Intent Verification (DeepSeek)
+                                </label>
+                                <div className="text-muted mb-3" style={{fontSize: '0.7rem'}}>Uses AI to analyze every comment and find genuine leads based on the context below.</div>
                                 
-                                {useAiVerification && (
-                                    <div className="mt-2 p-2 bg-dark rounded border border-primary border-opacity-25">
-                                        <label className="text-primary small fw-bold mb-1">Product/Service Context (What are you selling?)</label>
-                                        <textarea 
-                                            className="form-control form-control-sm bg-black text-white border-secondary" 
-                                            rows={2}
-                                            placeholder="e.g. We sell a SaaS tool for managing Twitter accounts..."
-                                            value={aiContext}
-                                            onChange={e => {
-                                                setAiContext(e.target.value);
-                                                if (smartIntentMode) setSmartIntentMode(false);
-                                            }}
-                                            style={{ fontSize: '0.8rem' }}
-                                        />
-                                        <div className="text-muted mt-1" style={{fontSize: '0.65rem'}}>The AI uses this context to determine if the commenter is a genuine lead.</div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="mb-3">
-                                <label className="form-label text-muted">Comment Keywords (Regex Supported)</label>
-                                <textarea 
-                                    className="form-control font-monospace" 
-                                    value={keywords} 
-                                    onChange={e => {
-                                        setKeywords(e.target.value);
-                                        if (smartIntentMode) setSmartIntentMode(false); // Disable auto mode if user manually edits
-                                    }} 
-                                    style={{minHeight: '100px'}}
-                                    // UX FIX: Dynamic placeholder for better user guidance
-                                    placeholder={scrapeMode === 'YOUTUBE' ? "Find within comments:\ne.g.\nbest link\nfunny\nfix" : "Enter one keyword per line\ne.g.\nbest app for\nhow to.*fix"}
-                                ></textarea>
-                                <div className="form-text text-secondary">Case-insensitive. Only comments matching these will be saved.</div>
+                                <div className="p-2 bg-dark rounded border border-primary border-opacity-25">
+                                    <label className="text-primary small fw-bold mb-1">Product/Service Context (What are you selling?)</label>
+                                    <textarea 
+                                        className="form-control form-control-sm bg-black text-white border-secondary" 
+                                        rows={4}
+                                        placeholder="e.g. We sell a SaaS tool for managing Twitter accounts..."
+                                        value={aiContext}
+                                        onChange={e => setAiContext(e.target.value)}
+                                        style={{ fontSize: '0.8rem' }}
+                                    />
+                                    <div className="text-muted mt-1" style={{fontSize: '0.65rem'}}>The AI uses this context to determine if the commenter is a genuine lead.</div>
+                                </div>
                             </div>
 
                             <div className="mb-4">

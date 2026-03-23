@@ -64,7 +64,7 @@ export interface Campaign {
   id: string;
   name: string;
   targetSubreddits: string[];
-  keywords: string[]; // NEW: For Auto-Search
+  aiContext: string; // NEW: For AI Intent Verification
   status: 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'DRAFT';
   postsEngaged: number;
   commentsGenerated: number;
@@ -165,9 +165,8 @@ export interface RedditSystemHealth {
 
 // NEW: Marketing Types with Extended YouTube Categories
 export type MarketingCategory = 
-    'MOVIES' | 'SERIES' | 'MATCHES' | 'RECIPES' | 'GAMES' | 'APPS' | 
-    'APPS_MOD' | 'GAMES_MOD' | 'EARN_MONEY' | 'ECOMMERCE' | 'COURSE' | 'SERVICE' | 'DATING' | 'MUSIC' |
-    'CUSTOM' | 'YOUTUBE';
+    'MOVIES' | 'SERIES' | 'SPORTS' | 'RECIPES' | 'APPS_MOD' | 'EARN_MONEY' | 
+    'ECOMMERCE' | 'COURSES' | 'SERVICES' | 'DATING' | 'MUSIC' | 'CUSTOM';
 
 // Updated Timeframes to support requirements
 export type SearchTimeframe = 'hour' | '24h' | '48h' | '72h' | 'week' | 'month' | '3months' | 'year' | 'all' | 'custom';

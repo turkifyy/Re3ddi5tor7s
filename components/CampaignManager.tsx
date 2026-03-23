@@ -23,7 +23,7 @@ export const CampaignManager: React.FC = () => {
 
   const [newCampName, setNewCampName] = useState('');
   const [newSubreddit, setNewSubreddit] = useState('');
-  const [newKeywords, setNewKeywords] = useState(''); 
+  const [newAiContext, setNewAiContext] = useState(''); 
   const [isCreating, setIsCreating] = useState(false);
 
   const fetchCampaigns = async () => {
@@ -55,7 +55,7 @@ export const CampaignManager: React.FC = () => {
         await DatabaseService.addCampaign({
             name: newCampName,
             targetSubreddits: newSubreddit.split(',').map(s => s.trim()).filter(s => s),
-            keywords: newKeywords.split(',').map(k => k.trim()).filter(k => k), 
+            aiContext: newAiContext, 
             status: 'RUNNING',
             postsEngaged: 0,
             commentsGenerated: 0,
@@ -137,8 +137,8 @@ export const CampaignManager: React.FC = () => {
                                   <input type="text" className="form-control" value={newSubreddit} onChange={e => setNewSubreddit(e.target.value)} />
                               </div>
                               <div className="col-12">
-                                  <label className="form-label"><Bot size={16} className="text-info me-1"/> Auto-Hunt Keywords</label>
-                                  <input type="text" className="form-control" value={newKeywords} onChange={e => setNewKeywords(e.target.value)} />
+                                  <label className="form-label"><Bot size={16} className="text-info me-1"/> AI Intent Context</label>
+                                  <input type="text" className="form-control" placeholder="e.g. Looking for people who need video editing software..." value={newAiContext} onChange={e => setNewAiContext(e.target.value)} />
                               </div>
                           </div>
                           <div className="text-end mt-4">
@@ -160,9 +160,9 @@ export const CampaignManager: React.FC = () => {
                                   </div>
                                   <p className="text-muted small font-monospace text-truncate">{c.targetSubreddits.join(', ')}</p>
                                   
-                                  {c.keywords?.length > 0 && (
+                                  {c.aiContext && c.aiContext.length > 0 && (
                                       <div className="bg-dark p-2 rounded mb-3 border border-secondary border-opacity-25">
-                                          <small className="text-info d-flex align-items-center"><Bot size={12} className="me-2"/> Auto-Hunt Active</small>
+                                          <small className="text-info d-flex align-items-center"><Bot size={12} className="me-2"/> AI Intent Active</small>
                                       </div>
                                   )}
                                   
