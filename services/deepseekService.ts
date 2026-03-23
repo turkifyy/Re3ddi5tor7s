@@ -247,6 +247,99 @@ Requirements:
     }
   },
 
+  async analyzeLeadIntentBatch(comments: {id: string, text: string}[], context: string): Promise<Record<string, { isLead: boolean, score: number, intent: string, reason: string }>> {
+    logger.info('AI', `Batch Precision Mode: Analyzing ${comments.length} comments...`);
+
+    if (!dynamicApiKey || dynamicApiKey.includes("YOUR_")) {
+        const errorMsg = "CRITICAL: DeepSeek API Key missing.";
+        logger.error('AI', errorMsg);
+        throw new Error(errorMsg);
+    }
+
+    if (comments.length === 0) return {};
+
+    try {
+      return await measure(async () => {
+          // Prepare the comments payload
+          const commentsPayload = comments.map(c => `[ID: ${c.id}] ${c.text}`).join('\n\n');
+
+          const response = await fetchWithRobustness(`${BASE_URL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${dynamicApiKey}`
+            },
+            body: JSON.stringify({
+              model: "deepseek-chat",
+              messages: [
+                {
+                  role: "system",
+                  content: `You are an elite lead generation analyst. Analyze the provided batch of comments to determine if the user is a potential customer for the product/service described in the Context.
+                  
+CRITERIA FOR A GOOD LEAD:
+- They express a pain point the product solves.
+- They are asking for recommendations related to the product.
+- They show buying intent or frustration with a competitor.
+
+Return ONLY a valid JSON object where the keys are the comment IDs and the values are objects with the analysis. No markdown formatting. Schema:
+{
+  "COMMENT_ID": {
+    "isLead": boolean, // true if they are a strong potential customer
+    "score": number, // 0 to 100 based on buying intent urgency
+    "intent": string, // 3-5 words summarizing what they want/need
+    "reason": string // 1 short sentence explaining why they are or aren't a lead
+  }
+}`
+                },
+                {
+                  role: "user",
+                  content: `Context (What we are selling): "${context}"\n\nComments to analyze:\n${commentsPayload}`
+                }
+              ],
+              temperature: 0.1,
+              response_format: { type: "json_object" }
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`API Error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          const content = data.choices[0]?.message?.content;
+          
+          let result: Record<string, any> = {};
+          try {
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                result = JSON.parse(jsonMatch[0]);
+            } else {
+                const cleanJson = content.replace(/```json\n?|```/g, '').trim();
+                result = JSON.parse(cleanJson);
+            }
+          } catch (e) {
+             logger.error('AI', 'Failed to parse JSON response for Batch Lead Intent.');
+             throw new Error("JSON Parsing Failed");
+          }
+          
+          await DatabaseService.incrementAiOps();
+          
+          let leadsFound = 0;
+          for (const key in result) {
+              if (result[key].isLead) leadsFound++;
+          }
+          
+          logger.success('AI', `Batch Analysis Complete. Found ${leadsFound} leads out of ${comments.length} comments.`);
+          
+          return result;
+      });
+
+    } catch (error) {
+       logger.error('AI', `Batch Lead Intent Analysis Failed: ${(error as Error).message}`);
+       return {}; 
+    }
+  },
+
   async analyzeLeadIntent(comment: string, context: string): Promise<{ isLead: boolean, score: number, intent: string, reason: string }> {
     logger.info('AI', `Precision Mode: Analyzing Lead Intent...`);
 

@@ -149,8 +149,8 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
     };
 
     const handleRunSmartSearch = async () => {
-        // INPUT HARDENING: Ensure Custom Categories have actual text
-        if (selectedCategory === 'CUSTOM' && !customSubreddits.trim()) {
+        // INPUT HARDENING: Ensure Custom Categories have actual text (unless targeting a specific video)
+        if (selectedCategory === 'CUSTOM' && !customSubreddits.trim() && !(scrapeMode === 'YOUTUBE' && customVideoId)) {
             addToast('error', 'Please enter Search Topics for Custom category.');
             return;
         }
@@ -255,6 +255,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
 
                 // Process Loop
                 let matchesFound = 0;
+                const seenIds = new Set<string>();
 
                 for (let i = 0; i < videoTargets.length; i++) {
                      if (abortRef.current) break;
@@ -267,55 +268,67 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                         // SMART FETCH: Pass includeReplies parameter
                         const comments = await YouTubeService.fetchVideoComments(target.id, limitPreset, includeReplies);
                         
-                        for (const comment of comments) {
-                            // SMART FILTER: Minimum Likes
-                            if (minCommentLikes > 0 && (comment.likes || 0) < minCommentLikes) {
-                                continue; // Skip low-value comments
-                            }
-
-                            // AI INTENT VERIFICATION
-                            addLog(`[AI] Analyzing intent for: ${comment.author}...`, 'INFO');
-                            const analysis = await deepseekService.analyzeLeadIntent(comment.content, aiContext);
+                        // Filter comments first to save AI tokens
+                        const filteredComments = comments.filter(c => !(minCommentLikes > 0 && (c.likes || 0) < minCommentLikes));
+                        
+                        // Batch process comments
+                        const BATCH_SIZE = 50;
+                        for (let j = 0; j < filteredComments.length; j += BATCH_SIZE) {
+                            if (abortRef.current) break;
+                            const batch = filteredComments.slice(j, j + BATCH_SIZE);
+                            const batchPayload = batch.map(c => ({ id: c.id, text: c.content }));
                             
-                            if (!analysis.isLead) {
-                                addLog(`[AI] Rejected lead from ${comment.author}. Reason: ${analysis.reason}`, 'WARN');
-                                continue; // Skip this lead, AI says it's not good
-                            }
-
-                            const aiData = {
-                                score: analysis.score,
-                                intent: analysis.intent,
-                                reason: analysis.reason
-                            };
-
-                            const typeLabel = comment.isReply ? 'REPLY' : 'COMMENT';
-                            addLog(`LEAD FOUND: AI matched intent in ${typeLabel} by ${comment.author} (${comment.likes} likes)`, 'SUCCESS');
+                            addLog(`[AI] Analyzing intent for batch of ${batch.length} comments...`, 'INFO');
+                            const batchAnalysis = await deepseekService.analyzeLeadIntentBatch(batchPayload, aiContext);
                             
-                            const maxTitleLen = 60; 
-                            const titleClean = comment.videoTitle.length > maxTitleLen 
-                                ? `${comment.videoTitle.substring(0, maxTitleLen)}...` 
-                                : comment.videoTitle;
-    
-                            const newLead: ScrapedLead = {
-                                id: comment.id,
-                                type: 'COMMENT',
-                                subreddit: `YouTube: ${titleClean} [${typeLabel}]`,
-                                author: comment.author,
-                                content: comment.content,
-                                matchedKeyword: 'AI Verified',
-                                permalink: `/watch?v=${target.id}&lc=${comment.id}`,
-                                scrapedAt: new Date().toISOString(),
-                                status: 'NEW',
-                                score: comment.likes,
-                                aiScore: aiData.score,
-                                aiIntent: aiData.intent,
-                                aiReasoning: aiData.reason
-                            };
-    
-                            if (!results.find(l => l.id === newLead.id)) {
-                                 await DatabaseService.addScrapedLead(newLead);
-                                 setResults(prev => [...prev, newLead]);
-                                 matchesFound++;
+                            for (const comment of batch) {
+                                const analysis = batchAnalysis[comment.id];
+                                if (!analysis || !analysis.isLead) {
+                                    // addLog(`[AI] Rejected lead from ${comment.author}. Reason: ${analysis?.reason || 'No intent'}`, 'WARN');
+                                    continue;
+                                }
+
+                                const aiData = {
+                                    score: analysis.score,
+                                    intent: analysis.intent,
+                                    reason: analysis.reason
+                                };
+
+                                const typeLabel = comment.isReply ? 'REPLY' : 'COMMENT';
+                                addLog(`LEAD FOUND: AI matched intent in ${typeLabel} by ${comment.author} (${comment.likes} likes)`, 'SUCCESS');
+                                
+                                const maxTitleLen = 60; 
+                                const titleClean = comment.videoTitle.length > maxTitleLen 
+                                    ? `${comment.videoTitle.substring(0, maxTitleLen)}...` 
+                                    : comment.videoTitle;
+        
+                                const newLead: ScrapedLead = {
+                                    id: comment.id,
+                                    type: 'COMMENT',
+                                    subreddit: `YouTube: ${titleClean} [${typeLabel}]`,
+                                    author: comment.author,
+                                    content: comment.content,
+                                    matchedKeyword: 'AI Verified',
+                                    permalink: `/watch?v=${target.id}&lc=${comment.id}`,
+                                    scrapedAt: new Date().toISOString(),
+                                    status: 'NEW',
+                                    score: comment.likes,
+                                    aiScore: aiData.score,
+                                    aiIntent: aiData.intent,
+                                    aiReasoning: aiData.reason
+                                };
+        
+                                if (!seenIds.has(newLead.id)) {
+                                     seenIds.add(newLead.id);
+                                     await DatabaseService.addScrapedLead(newLead);
+                                     setResults(prev => [...prev, newLead]);
+                                     matchesFound++;
+                                }
+                            }
+                            
+                            // Small delay between batches to prevent rate limits
+                            if (j + BATCH_SIZE < filteredComments.length) {
+                                await new Promise(r => setTimeout(r, 1000));
                             }
                         }
                      } catch (err: any) {
@@ -369,6 +382,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
         }
 
         const leadsFound: ScrapedLead[] = [];
+        const seenIds = new Set<string>();
         const apiTimeframe = timeframe === '24h' ? 'day' : timeframe;
 
         try {
@@ -399,47 +413,61 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                     }
                     
                     let subLeads = 0;
-                    for (const post of posts) {
-                        const displayContent = `${post.title} ${post.selftext || ''}`;
+                    
+                    // Batch process Reddit posts
+                    const BATCH_SIZE = 20; // Slightly smaller batch for Reddit posts since they can be longer
+                    for (let j = 0; j < posts.length; j += BATCH_SIZE) {
+                        if (abortRef.current) break;
+                        const batch = posts.slice(j, j + BATCH_SIZE);
+                        const batchPayload = batch.map(p => ({ id: p.name, text: `${p.title} ${p.selftext || ''}` }));
                         
-                        // AI INTENT VERIFICATION
-                        addLog(`[AI] Analyzing intent for post by: ${post.author}...`, 'INFO');
-                        const analysis = await deepseekService.analyzeLeadIntent(displayContent, aiContext);
+                        addLog(`[AI] Analyzing intent for batch of ${batch.length} posts...`, 'INFO');
+                        const batchAnalysis = await deepseekService.analyzeLeadIntentBatch(batchPayload, aiContext);
                         
-                        if (!analysis.isLead) {
-                            addLog(`[AI] Rejected lead from ${post.author}. Reason: ${analysis.reason}`, 'WARN');
-                            continue; // Skip this lead, AI says it's not good
+                        for (const post of batch) {
+                            const analysis = batchAnalysis[post.name];
+                            if (!analysis || !analysis.isLead) {
+                                // addLog(`[AI] Rejected lead from ${post.author}. Reason: ${analysis?.reason || 'No intent'}`, 'WARN');
+                                continue;
+                            }
+                            
+                            const aiData = {
+                                score: analysis.score,
+                                intent: analysis.intent,
+                                reason: analysis.reason
+                            };
+
+                            addLog(`LEAD FOUND: AI matched intent in ${post.id}`, 'SUCCESS');
+                            
+                            const displayContent = `${post.title} ${post.selftext || ''}`;
+                            const newLead: ScrapedLead = {
+                                id: post.name,
+                                type: 'POST',
+                                subreddit: sub,
+                                author: post.author,
+                                content: displayContent, 
+                                matchedKeyword: 'AI Verified',
+                                permalink: post.permalink,
+                                scrapedAt: new Date().toISOString(),
+                                status: 'NEW',
+                                score: post.score,
+                                aiScore: aiData.score,
+                                aiIntent: aiData.intent,
+                                aiReasoning: aiData.reason
+                            };
+
+                            if (!seenIds.has(newLead.id)) {
+                                seenIds.add(newLead.id);
+                                await DatabaseService.addScrapedLead(newLead);
+                                leadsFound.push(newLead);
+                                setResults(prev => [...prev, newLead]);
+                                subLeads++;
+                            }
                         }
-
-                        const aiData = {
-                            score: analysis.score,
-                            intent: analysis.intent,
-                            reason: analysis.reason
-                        };
-
-                        addLog(`LEAD FOUND: AI matched intent in ${post.id}`, 'SUCCESS');
                         
-                        const newLead: ScrapedLead = {
-                            id: post.name,
-                            type: 'POST',
-                            subreddit: sub,
-                            author: post.author,
-                            content: displayContent, 
-                            matchedKeyword: 'AI Verified',
-                            permalink: post.permalink,
-                            scrapedAt: new Date().toISOString(),
-                            status: 'NEW',
-                            score: post.score,
-                            aiScore: aiData.score,
-                            aiIntent: aiData.intent,
-                            aiReasoning: aiData.reason
-                        };
-
-                        if (!leadsFound.find(l => l.id === newLead.id)) {
-                            await DatabaseService.addScrapedLead(newLead);
-                            leadsFound.push(newLead);
-                            setResults(prev => [...prev, newLead]);
-                            subLeads++;
+                        // Small delay between batches to prevent rate limits
+                        if (j + BATCH_SIZE < posts.length) {
+                            await new Promise(r => setTimeout(r, 1000));
                         }
                     }
                     
@@ -648,6 +676,35 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                         <div className="form-text text-info opacity-75 mb-3">Overrides trend search. Extracts leads from a specific video.</div>
                                     </div>
 
+                                    {/* ALWAYS SHOW CATEGORY FOR AI CONTEXT */}
+                                    <div className="mb-3">
+                                        <label className="form-label text-muted">
+                                            <ListFilter size={14} className="me-1"/> 
+                                            {customVideoId ? 'AI Analysis Category' : 'Content Category'}
+                                        </label>
+                                        <select className="form-select border-danger" value={selectedCategory} onChange={e => handleCategoryChange(e.target.value)}>
+                                            <option value="MOVIES">Movies & Cinema</option>
+                                            <option value="SERIES">TV Series & Shows</option>
+                                            <option value="MATCHES">Football & Sports</option>
+                                            <option value="RECIPES">Food & Recipes</option>
+                                            <option value="APPS_MOD">Apps Mod (APK)</option>
+                                            <option value="GAMES_MOD">Games Mod (APK)</option>
+                                            <option value="EARN_MONEY">Earn Money / Online Work</option>
+                                            <option value="ECOMMERCE">E-Commerce & Products</option>
+                                            <option value="COURSE">Courses & Education</option>
+                                            <option value="SERVICE">Services & Freelancing</option>
+                                            <option value="DATING">Dating & Relationships</option>
+                                            <option value="MUSIC">Download Music</option>
+                                            <option value="CUSTOM">Custom Search Topics</option>
+                                        </select>
+                                        {customVideoId && (
+                                            <div className="form-text text-info mt-1" style={{fontSize: '0.75rem'}}>
+                                                <Zap size={12} className="me-1"/>
+                                                Select the category to define what the AI should look for in the comments.
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {!customVideoId && (
                                         <>
                                             <div className="p-3 mb-3 bg-danger bg-opacity-10 rounded border border-danger border-opacity-25 text-center">
@@ -684,25 +741,6 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                                     <option value="es">Spanish (ES)</option>
                                                 </select>
                                                 <div className="form-text text-secondary">Forces YouTube to return content in this language (Prevents unwanted Indian/Hindi content).</div>
-                                            </div>
-
-                                            <div className="mb-3">
-                                                <label className="form-label text-muted"><Globe size={14} className="me-1"/> Content Category</label>
-                                                <select className="form-select border-danger" value={selectedCategory} onChange={e => handleCategoryChange(e.target.value)}>
-                                                    <option value="MOVIES">Movies & Cinema</option>
-                                                    <option value="SERIES">TV Series & Shows</option>
-                                                    <option value="MATCHES">Football & Sports</option>
-                                                    <option value="RECIPES">Food & Recipes</option>
-                                                    <option value="APPS_MOD">Apps Mod (APK)</option>
-                                                    <option value="GAMES_MOD">Games Mod (APK)</option>
-                                                    <option value="EARN_MONEY">Earn Money / Online Work</option>
-                                                    <option value="ECOMMERCE">E-Commerce & Products</option>
-                                                    <option value="COURSE">Courses & Education</option>
-                                                    <option value="SERVICE">Services & Freelancing</option>
-                                                    <option value="DATING">Dating & Relationships</option>
-                                                    <option value="MUSIC">Download Music</option>
-                                                    <option value="CUSTOM">Custom Search Topics</option>
-                                                </select>
                                             </div>
 
                                             {selectedCategory === 'CUSTOM' && (
@@ -786,7 +824,9 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                      <option value="10">Scan 10 {scrapeMode === 'YOUTUBE' ? 'Comments' : 'Posts'}</option>
                                      <option value="25">Scan 25 {scrapeMode === 'YOUTUBE' ? 'Comments' : 'Posts'}</option>
                                      <option value="50">Scan 50 {scrapeMode === 'YOUTUBE' ? 'Comments' : 'Posts'}</option>
-                                     <option value="100">Scan 100 {scrapeMode === 'YOUTUBE' ? 'Comments' : 'Posts'} (Slow)</option>
+                                     <option value="100">Scan 100 {scrapeMode === 'YOUTUBE' ? 'Comments' : 'Posts'}</option>
+                                     <option value="500">Scan 500 {scrapeMode === 'YOUTUBE' ? 'Comments' : 'Posts'} (Batch AI)</option>
+                                     <option value="1000">Scan 1000 {scrapeMode === 'YOUTUBE' ? 'Comments' : 'Posts'} (Deep Scan)</option>
                                  </select>
                             </div>
 
@@ -794,7 +834,7 @@ export const ScraperManager: React.FC<ScraperManagerProps> = ({ onNavigate }) =>
                                 {!isRunning ? (
                                     <Button onClick={handleRunSmartSearch}>
                                         {scrapeMode === 'YOUTUBE' ? <Youtube size={16} className="me-2"/> : <Zap size={16} className="me-2"/>}
-                                        {scrapeMode === 'YOUTUBE' ? 'Start Trend Scan' : 'Start Subreddit Scraping'}
+                                        {scrapeMode === 'YOUTUBE' ? (customVideoId ? 'Scan Video Comments' : 'Start Trend Scan') : 'Start Subreddit Scraping'}
                                     </Button>
                                 ) : (
                                     <Button variant="danger" onClick={() => abortRef.current = true}><StopCircle size={16} className="me-2"/> Stop Operation</Button>
